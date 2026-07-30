@@ -117,6 +117,7 @@ func (e *Engine) RunPrompt(prompt string, stream bool) error {
 			return err
 		}
 		var sb strings.Builder
+		hadContent := false
 		for chunk := range ch {
 			if chunk.Error != nil {
 				return chunk.Error
@@ -124,11 +125,24 @@ func (e *Engine) RunPrompt(prompt string, stream bool) error {
 			if chunk.Done {
 				break
 			}
+			if chunk.Content != "" {
+				hadContent = true
+			}
 			sb.WriteString(chunk.Content)
 			fmt.Print(chunk.Content)
 		}
-		fmt.Println()
 		fullResponse = sb.String()
+		if !hadContent && fullResponse == "" {
+			fmt.Println()
+			resp, err := p.Chat(req)
+			if err != nil {
+				return err
+			}
+			fullResponse = resp.Message.Content
+			fmt.Println(fullResponse)
+		} else {
+			fmt.Println()
+		}
 	} else {
 		resp, err := p.Chat(req)
 		if err != nil {

@@ -64,8 +64,9 @@ func (p *OpenAICompatible) ListModels() ([]models.Model, error) {
 }
 
 type openAIMessage struct {
-	Role    string `json:"role"`
-	Content string `json:"content"`
+	Role             string `json:"role"`
+	Content          string `json:"content"`
+	ReasoningContent string `json:"reasoning_content"`
 }
 
 type openAIChatRequest struct {
@@ -94,6 +95,17 @@ type openAIChatResponse struct {
 	Model   string         `json:"model"`
 	Choices []openAIChoice `json:"choices"`
 	Usage   *openAIUsage   `json:"usage,omitempty"`
+}
+
+func parseSSELine(line string) (string, bool) {
+	if !strings.HasPrefix(line, "data: ") {
+		return "", false
+	}
+	data := strings.TrimPrefix(line, "data: ")
+	if data == "[DONE]" {
+		return "", true
+	}
+	return data, false
 }
 
 func (p *OpenAICompatible) Chat(req models.ChatRequest) (*models.ChatResponse, error) {
@@ -133,9 +145,33 @@ func (p *OpenAICompatible) Chat(req models.ChatRequest) (*models.ChatResponse, e
 		return nil, fmt.Errorf("API error %d: %s", resp.StatusCode, string(bodyBytes))
 	}
 
+	bodyBytes, _ := io.ReadAll(resp.Body)
+	bodyStr := string(bodyBytes)
+
+	// Handle both SSE-wrapped and plain JSON responses
 	var result openAIChatResponse
-	if err := json.NewDecoder(resp.Body).Decode(&result); err != nil {
-		return nil, err
+	if strings.HasPrefix(bodyStr, "data: ") {
+		scanner := bufio.NewScanner(strings.NewReader(bodyStr))
+		for scanner.Scan() {
+			line := scanner.Text()
+			data, done := parseSSELine(line)
+			if done {
+				break
+			}
+			if data == "" {
+				continue
+			}
+			if err := json.Unmarshal([]byte(data), &result); err != nil {
+				continue
+			}
+			if len(result.Choices) > 0 {
+				break
+			}
+		}
+	} else {
+		if err := json.Unmarshal(bodyBytes, &result); err != nil {
+			return nil, err
+		}
 	}
 
 	if len(result.Choices) == 0 {
@@ -222,9 +258,20 @@ func (p *OpenAICompatible) ChatStream(req models.ChatRequest) (<-chan models.Str
 				continue
 			}
 			for _, choice := range chunk.Choices {
+				content := choice.Delta.Content
+				reasoning := choice.Delta.ReasoningContent
+				if content == "" && reasoning != "" {
+					content = reasoning
+				}
 				sc := models.StreamChunk{
-					Content: choice.Delta.Content,
-					Model:   chunk.Model,
+					Model:     chunk.Model,
+					Reasoning: reasoning,
+				}
+				if content == "" && (choice.FinishReason != "stop" || chunk.Usage == nil) {
+					continue
+				}
+				if content != "" {
+					sc.Content = content
 				}
 				if choice.FinishReason == "stop" {
 					sc.Done = true

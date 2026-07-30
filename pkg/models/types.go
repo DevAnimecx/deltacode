@@ -52,11 +52,12 @@ type ChatResponse struct {
 }
 
 type StreamChunk struct {
-	Content  string `json:"content"`
-	Done     bool   `json:"done"`
-	Model    string `json:"model,omitempty"`
-	Usage    *Usage `json:"usage,omitempty"`
-	Error    error  `json:"-"`
+	Content    string `json:"content"`
+	Reasoning  string `json:"reasoning,omitempty"`
+	Done       bool   `json:"done"`
+	Model      string `json:"model,omitempty"`
+	Usage      *Usage `json:"usage,omitempty"`
+	Error      error  `json:"-"`
 }
 
 type Usage struct {

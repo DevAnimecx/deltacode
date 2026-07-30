@@ -7,7 +7,6 @@ import (
 	"github.com/DevAnimecx/deltacode/internal/config"
 	"github.com/DevAnimecx/deltacode/internal/cli/tui"
 	"github.com/DevAnimecx/deltacode/internal/setup"
-	tea "github.com/charmbracelet/bubbletea"
 	"github.com/spf13/cobra"
 )
 
@@ -58,7 +57,7 @@ Quick start:
 					setup.RunWizard(globalCfg)
 					return
 				}
-				p := tea.NewProgram(tui.NewChatModel(globalCfg))
+				p := tui.InitProgram(globalCfg)
 				if _, err := p.Run(); err != nil {
 					fmt.Fprintf(os.Stderr, "TUI error: %v\n", err)
 					os.Exit(1)
