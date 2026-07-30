@@ -118,6 +118,9 @@ func (e *Engine) RunPrompt(prompt string, stream bool) error {
 		}
 		var sb strings.Builder
 		for chunk := range ch {
+			if chunk.Error != nil {
+				return chunk.Error
+			}
 			if chunk.Done {
 				break
 			}

@@ -56,6 +56,7 @@ type StreamChunk struct {
 	Done     bool   `json:"done"`
 	Model    string `json:"model,omitempty"`
 	Usage    *Usage `json:"usage,omitempty"`
+	Error    error  `json:"-"`
 }
 
 type Usage struct {

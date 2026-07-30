@@ -3,11 +3,13 @@ package provider
 import (
 	"bufio"
 	"bytes"
+	"context"
 	"encoding/json"
 	"fmt"
 	"io"
 	"net/http"
 	"strings"
+	"time"
 
 	"github.com/DevAnimecx/deltacode/pkg/models"
 )
@@ -116,9 +118,13 @@ func (p *OpenAICompatible) Chat(req models.ChatRequest) (*models.ChatResponse, e
 		httpReq.Header.Set("Authorization", "Bearer "+p.cfg.APIKey)
 	}
 
+	ctx, cancel := context.WithTimeout(context.Background(), 120*time.Second)
+	defer cancel()
+	httpReq = httpReq.WithContext(ctx)
+
 	resp, err := http.DefaultClient.Do(httpReq)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("API request failed: %w", err)
 	}
 	defer resp.Body.Close()
 
@@ -177,15 +183,27 @@ func (p *OpenAICompatible) ChatStream(req models.ChatRequest) (<-chan models.Str
 		httpReq.Header.Set("Authorization", "Bearer "+p.cfg.APIKey)
 	}
 
-	resp, err := http.DefaultClient.Do(httpReq)
-	if err != nil {
-		return nil, err
-	}
+	ctx, cancel := context.WithTimeout(context.Background(), 180*time.Second)
+	httpReq = httpReq.WithContext(ctx)
 
 	ch := make(chan models.StreamChunk, 64)
+
 	go func() {
-		defer resp.Body.Close()
+		defer cancel()
 		defer close(ch)
+
+		resp, err := http.DefaultClient.Do(httpReq)
+		if err != nil {
+			ch <- models.StreamChunk{Error: fmt.Errorf("API request failed: %w", err)}
+			return
+		}
+		defer resp.Body.Close()
+
+		if resp.StatusCode != 200 {
+			bodyBytes, _ := io.ReadAll(resp.Body)
+			ch <- models.StreamChunk{Error: fmt.Errorf("API error %d: %s", resp.StatusCode, string(bodyBytes))}
+			return
+		}
 
 		scanner := bufio.NewScanner(resp.Body)
 		for scanner.Scan() {
@@ -221,7 +239,13 @@ func (p *OpenAICompatible) ChatStream(req models.ChatRequest) (<-chan models.Str
 				ch <- sc
 			}
 		}
+
+		if err := scanner.Err(); err != nil {
+			ch <- models.StreamChunk{Error: fmt.Errorf("stream read error: %w", err)}
+			return
+		}
 	}()
+
 	return ch, nil
 }
 
