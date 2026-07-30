@@ -69,37 +69,25 @@ function Install-Delta {
     try {
         Invoke-WebRequest -Uri $ZipUrl -OutFile $ZipPath -UseBasicParsing
         Write-Host "  ✓ Downloaded" -ForegroundColor $C.Green
+        Expand-Archive -Path $ZipPath -DestinationPath "$env:TEMP\delta-code-extract" -Force
+        $BuildDir = Get-ChildItem "$env:TEMP\delta-code-extract" -Directory | Select-Object -First 1 -ExpandProperty FullName
     } catch {
         Write-Host "  ✗ Download failed. Cloning instead..." -ForegroundColor $C.Yellow
-        git clone --depth 1 "https://github.com/$Repo.git" "$env:TEMP\delta-code-src" 2>$null
+        git clone --depth 1 "https://github.com/$Repo.git" "$env:TEMP\delta-code-src" 2>&1 | Out-Null
         if ($LASTEXITCODE -ne 0) {
             Write-Host "  ✗ Clone failed. Install Go from https://go.dev/dl/ then re-run." -ForegroundColor $C.Red
             exit 1
         }
         $BuildDir = "$env:TEMP\delta-code-src"
-        goto buildPhase
     }
-    
-    Expand-Archive -Path $ZipPath -DestinationPath "$env:TEMP\delta-code-extract" -Force
-    $BuildDir = Get-ChildItem "$env:TEMP\delta-code-extract" -Directory | Select-Object -First 1 -ExpandProperty FullName
 
-    :buildPhase
     # Step 4: Build
     Write-Host "  [4/5] Building binary..." -ForegroundColor $C.Yellow
     
     if (Test-Path $DeltaExe) { Remove-Item $DeltaExe -Force }
     
     Push-Location $BuildDir
-    $spinner = @("⠋", "⠙", "⠹", "⠸", "⠼", "⠴", "⠦", "⠧", "⠇", "⠏")
-    $job = Start-Job -ScriptBlock { param($d) Set-Location $d; go build -o "$using:InstallDir\delta.exe" . } -ArgumentList $BuildDir
-    
-    $i = 0
-    while ($job.State -eq 'Running') {
-        Write-Host "`r  $($spinner[$i % $spinner.Length]) Building... ($('.' * (($i % 5) + 1)))" -NoNewline -ForegroundColor $C.Magenta
-        Start-Sleep -Milliseconds 200
-        $i++
-    }
-    Receive-Job $job -Wait | Out-Null
+    go build -o "$InstallDir\delta.exe" . 2>&1
     Pop-Location
     
     # Cleanup temp files
