@@ -1,4 +1,4 @@
-module github.com/delta-code/cli
+module github.com/DevAnimecx/deltacode
 
 go 1.26.1
 

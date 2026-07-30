@@ -4,9 +4,9 @@ import (
 	"fmt"
 	"os"
 
-	"github.com/delta-code/cli/internal/cli/commands"
-	"github.com/delta-code/cli/internal/config"
-	"github.com/delta-code/cli/internal/setup"
+	"github.com/DevAnimecx/deltacode/internal/cli/commands"
+	"github.com/DevAnimecx/deltacode/internal/config"
+	"github.com/DevAnimecx/deltacode/internal/setup"
 )
 
 func main() {

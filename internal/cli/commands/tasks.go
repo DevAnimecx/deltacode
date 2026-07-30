@@ -4,8 +4,8 @@ import (
 	"fmt"
 	"strings"
 
-	"github.com/delta-code/cli/internal/config"
-	"github.com/delta-code/cli/internal/tasks"
+	"github.com/DevAnimecx/deltacode/internal/config"
+	"github.com/DevAnimecx/deltacode/internal/tasks"
 	"github.com/spf13/cobra"
 )
 

@@ -11,7 +11,7 @@ import (
 	"os"
 	"path/filepath"
 
-	"github.com/delta-code/cli/pkg/models"
+	"github.com/DevAnimecx/deltacode/pkg/models"
 )
 
 const configDir = ".delta"

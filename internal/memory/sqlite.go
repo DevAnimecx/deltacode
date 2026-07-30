@@ -10,7 +10,7 @@ import (
 
 	_ "modernc.org/sqlite"
 
-	"github.com/delta-code/cli/pkg/models"
+	"github.com/DevAnimecx/deltacode/pkg/models"
 )
 
 type ProjectMemory struct {

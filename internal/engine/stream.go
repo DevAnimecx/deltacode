@@ -5,7 +5,7 @@ import (
 	"io"
 	"strings"
 
-	"github.com/delta-code/cli/pkg/models"
+	"github.com/DevAnimecx/deltacode/pkg/models"
 )
 
 type StreamRenderer interface {

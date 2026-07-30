@@ -6,7 +6,7 @@ import (
 	"encoding/json"
 	"net/http"
 
-	"github.com/delta-code/cli/pkg/models"
+	"github.com/DevAnimecx/deltacode/pkg/models"
 )
 
 type Ollama struct {

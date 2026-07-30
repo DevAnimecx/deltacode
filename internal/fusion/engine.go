@@ -5,8 +5,8 @@ import (
 	"strings"
 	"sync"
 
-	"github.com/delta-code/cli/internal/provider"
-	"github.com/delta-code/cli/pkg/models"
+	"github.com/DevAnimecx/deltacode/internal/provider"
+	"github.com/DevAnimecx/deltacode/pkg/models"
 )
 
 type TaskType string

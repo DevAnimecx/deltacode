@@ -4,9 +4,9 @@ import (
 	"fmt"
 	"os"
 
-	"github.com/delta-code/cli/internal/config"
-	"github.com/delta-code/cli/internal/cli/tui"
-	"github.com/delta-code/cli/internal/setup"
+	"github.com/DevAnimecx/deltacode/internal/config"
+	"github.com/DevAnimecx/deltacode/internal/cli/tui"
+	"github.com/DevAnimecx/deltacode/internal/setup"
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/spf13/cobra"
 )

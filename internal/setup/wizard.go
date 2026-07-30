@@ -8,9 +8,9 @@ import (
 	"strings"
 	"time"
 
-	"github.com/delta-code/cli/internal/config"
-	"github.com/delta-code/cli/internal/provider"
-	"github.com/delta-code/cli/pkg/models"
+	"github.com/DevAnimecx/deltacode/internal/config"
+	"github.com/DevAnimecx/deltacode/internal/provider"
+	"github.com/DevAnimecx/deltacode/pkg/models"
 )
 
 func RunWizard(cfg *config.Manager) {

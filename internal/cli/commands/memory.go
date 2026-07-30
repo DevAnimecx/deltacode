@@ -6,8 +6,8 @@ import (
 	"strings"
 	"time"
 
-	"github.com/delta-code/cli/internal/config"
-	"github.com/delta-code/cli/internal/memory"
+	"github.com/DevAnimecx/deltacode/internal/config"
+	"github.com/DevAnimecx/deltacode/internal/memory"
 	"github.com/spf13/cobra"
 )
 

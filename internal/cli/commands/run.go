@@ -5,8 +5,8 @@ import (
 	"os"
 	"strings"
 
-	"github.com/delta-code/cli/internal/config"
-	"github.com/delta-code/cli/internal/engine"
+	"github.com/DevAnimecx/deltacode/internal/config"
+	"github.com/DevAnimecx/deltacode/internal/engine"
 	"github.com/spf13/cobra"
 )
 

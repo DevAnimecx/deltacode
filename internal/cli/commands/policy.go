@@ -5,8 +5,8 @@ import (
 	"fmt"
 	"os"
 
-	"github.com/delta-code/cli/internal/config"
-	"github.com/delta-code/cli/internal/permissions"
+	"github.com/DevAnimecx/deltacode/internal/config"
+	"github.com/DevAnimecx/deltacode/internal/permissions"
 	"github.com/spf13/cobra"
 )
 
