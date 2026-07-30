@@ -28,3 +28,8 @@ Thumbs.db
 
 # Releases
 releases/
+
+# Binaries
+delta-*
+!delta.bat
+!install.ps1
