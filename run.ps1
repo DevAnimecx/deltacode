@@ -1,38 +1,64 @@
-# run.ps1 — Delta Code Helper Script
-# Usage: .\run.ps1 <command> [args]
+<#
+.SYNOPSIS
+    Δ Delta Code — PowerShell Launcher
+.DESCRIPTION
+    Auto-builds if binary missing. First run launches the interactive setup wizard.
+    Use this script to run Delta Code from anywhere.
+.EXAMPLE
+    .\run.ps1                       # Launch TUI or setup wizard
+    .\run.ps1 run "hello world"     # Generate code
+    .\run.ps1 doctor                # System check
+    .\run.ps1 provider add          # Add an AI provider
+#>
 
 param(
     [Parameter(Position=0)]
-    [string]$Command = "help",
+    [string]$Command = "",
     
     [Parameter(ValueFromRemainingArguments=$true)]
-    [string[]]$Args
+    [string[]]$Arguments
 )
 
-$deltaDir = "C:\Users\india\OneDrive\Documents\Delta Code"
-$deltaExe = Join-Path $deltaDir "delta.exe"
+$DeltaDir = Split-Path -Parent $MyInvocation.MyCommand.Path
+$DeltaExe = Join-Path $DeltaDir "delta.exe"
 
-if (!(Test-Path $deltaExe)) {
-    Write-Host "Delta Code binary not found at $deltaExe" -ForegroundColor Red
-    Write-Host "Run 'cd $deltaDir && go build -o delta.exe .' first" -ForegroundColor Yellow
-    exit 1
+# Colors
+$Cyan = "Cyan"
+$Green = "Green"
+$Yellow = "Yellow"
+$Red = "Red"
+
+# Auto-build if binary is missing
+if (-not (Test-Path $DeltaExe)) {
+    Write-Host "Δ Building Delta Code..." -ForegroundColor $Cyan
+    
+    if (-not (Test-Path (Join-Path $DeltaDir "go.mod"))) {
+        Write-Host "✗ Error: Not a Go project directory." -ForegroundColor $Red
+        Write-Host "  Clone the repo first:" -ForegroundColor $Yellow
+        Write-Host "  git clone https://github.com/DevAnimecx/deltacode.git" -ForegroundColor White
+        pause
+        exit 1
+    }
+    
+    Push-Location $DeltaDir
+    $build = Start-Process -FilePath "go" -ArgumentList "build -o delta.exe ." -NoNewWindow -Wait -PassThru
+    Pop-Location
+    
+    if (-not (Test-Path $DeltaExe)) {
+        Write-Host "✗ Build failed. Install Go from https://go.dev/dl/" -ForegroundColor $Red
+        pause
+        exit 1
+    }
+    Write-Host "✓ Build complete!" -ForegroundColor $Green
 }
 
-# Build command line
-$allArgs = @($Command) + $Args
-$joinedArgs = $allArgs -join ' '
-
-# Run delta
-& $deltaExe $allArgs
-
-# Helpful exit
-if ($LASTEXITCODE -ne 0 -and $Command -eq "help") {
-    Write-Host ""
-    Write-Host "Quick commands:" -ForegroundColor Cyan
-    Write-Host "  .\run.ps1 doctor                    # Check system health"
-    Write-Host "  .\run.ps1 provider add              # Add an AI provider"
-    Write-Host "  .\run.ps1 run ""write hello world""  # Generate code"
-    Write-Host "  .\run.ps1 fix ""bug description""    # Autonomous fix"
-    Write-Host ""
-    Write-Host "Or add delta to PATH and just run: delta <command>" -ForegroundColor Green
+# Show help if no args
+if ([string]::IsNullOrEmpty($Command)) {
+    & $DeltaExe
+    exit $LASTEXITCODE
 }
+
+# Run Delta with arguments
+$allArgs = @($Command) + $Arguments
+& $DeltaExe $allArgs
+exit $LASTEXITCODE
