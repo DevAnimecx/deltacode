@@ -58,7 +58,7 @@ Quick start:
 					setup.RunWizard(globalCfg)
 					return
 				}
-				p := tea.NewProgram(tui.NewModel())
+				p := tea.NewProgram(tui.NewChatModel(globalCfg))
 				if _, err := p.Run(); err != nil {
 					fmt.Fprintf(os.Stderr, "TUI error: %v\n", err)
 					os.Exit(1)
