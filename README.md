@@ -12,39 +12,39 @@
 
 ## 🚀 One-Click Install
 
-### Windows
-
+### Quickest — PowerShell (Windows)
 ```powershell
-# Clone and run (auto-builds on first launch)
-git clone https://github.com/DevAnimecx/deltacode.git
-cd deltacode
-.\run.ps1
+irm https://raw.githubusercontent.com/DevAnimecx/deltacode/main/install.ps1 | iex
+delta doctor
 ```
 
-**OR** use `delta.bat` from CMD:
-```cmd
+### Quickest — Go Install (any OS with Go)
+```bash
+go install github.com/DevAnimecx/deltacode@latest
+delta doctor
+```
+
+### Or Clone + Auto-Build
+```powershell
 git clone https://github.com/DevAnimecx/deltacode.git
 cd deltacode
-delta.bat
+.\run.ps1          # Windows — auto-builds on first launch
+# OR
+delta.bat          # Windows — CMD version
+# OR
+go build -o delta . && ./delta    # macOS / Linux
 ```
+
+### Pre-built Binaries
+Download from [GitHub Releases](https://github.com/DevAnimecx/deltacode/releases):
+| File | Platform |
+|------|----------|
+| `delta-windows-amd64.exe` | Windows 64-bit |
+| `delta-linux-amd64` | Linux 64-bit |
+| `delta-darwin-arm64` | Mac Apple Silicon |
+| `delta-darwin-amd64` | Mac Intel |
 
 First run automatically launches the **interactive setup wizard** — just pick your AI provider and paste your API key.
-
-### macOS / Linux
-
-```bash
-git clone https://github.com/DevAnimecx/deltacode.git
-cd deltacode
-go build -o delta .
-./delta
-```
-
-### Quick Add to PATH (Windows)
-
-```powershell
-# Run as Administrator
-[Environment]::SetEnvironmentVariable("Path", "$env:Path;$env:USERPROFILE\deltacode", "User")
-```
 
 ---
 
