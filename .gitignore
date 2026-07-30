@@ -1,0 +1,27 @@
+# Binaries
+delta.exe
+delta
+*.exe
+*.dll
+*.so
+*.dylib
+
+# Build
+*.out
+*.test
+*.test.exe
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Delta
+.delta/
+.delta-project/
