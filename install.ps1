@@ -5,7 +5,7 @@
     Downloads and installs Delta Code in one command.
     
     One-liner:
-        irm https://raw.githubusercontent.com/DevAnimecx/deltacode/main/install.ps1 | iex
+        irm https://raw.githubusercontent.com/DevAnimecx/deltacode/master/install.ps1 | iex
     
     Or download and run:
         git clone https://github.com/DevAnimecx/deltacode.git
@@ -17,7 +17,7 @@
 
 $ErrorActionPreference = "Stop"
 $Repo = "DevAnimecx/deltacode"
-$Branch = "main"
+$Branch = "master"
 $InstallDir = "$env:USERPROFILE\.delta-bin"
 $DeltaExe = "$InstallDir\delta.exe"
 

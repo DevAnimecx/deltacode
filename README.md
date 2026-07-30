@@ -14,7 +14,7 @@
 
 ### Quickest — PowerShell (Windows)
 ```powershell
-irm https://raw.githubusercontent.com/DevAnimecx/deltacode/main/install.ps1 | iex
+irm https://raw.githubusercontent.com/DevAnimecx/deltacode/master/install.ps1 | iex
 delta doctor
 ```
 
