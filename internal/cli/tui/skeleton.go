@@ -16,59 +16,61 @@ import (
 	"github.com/charmbracelet/bubbles/textarea"
 	"github.com/charmbracelet/bubbles/viewport"
 	tea "github.com/charmbracelet/bubbletea"
+	"github.com/charmbracelet/glamour"
 	"github.com/charmbracelet/lipgloss"
 )
 
 type chatMessage struct {
-	role    string
-	content string
+	role     string
+	content  string
+	duration time.Duration
+	tokens   int
+	cost     float64
 }
 
-type style struct {
+type st struct {
 	header     lipgloss.Style
-	subheader  lipgloss.Style
+	subh      lipgloss.Style
 	status     lipgloss.Style
 	userMsg    lipgloss.Style
-	userPrefix lipgloss.Style
+	userPr     lipgloss.Style
 	asstMsg    lipgloss.Style
-	asstPrefix lipgloss.Style
-	codeBg     lipgloss.Style
-	codeLabel  lipgloss.Style
-	system     lipgloss.Style
-	separator  lipgloss.Style
-	footKey    lipgloss.Style
-	footDesc   lipgloss.Style
+	asstPr     lipgloss.Style
+	sysMsg     lipgloss.Style
+	sep        lipgloss.Style
+	fk         lipgloss.Style
+	fd         lipgloss.Style
 	errMsg     lipgloss.Style
 	dim        lipgloss.Style
-	border     lipgloss.Style
-	meter      lipgloss.Style
+	brd        lipgloss.Style
+	scroll     lipgloss.Style
+	meta       lipgloss.Style
+	logo       lipgloss.Style
 }
 
-func defaultStyle() style {
-	cyan := lipgloss.Color("43")
-	teal := lipgloss.Color("37")
+func newStyle() st {
+	c := lipgloss.Color("43")
+	t := lipgloss.Color("37")
 	sub := lipgloss.Color("244")
-	gray := lipgloss.Color("240")
-	dk := lipgloss.Color("236")
-
-	return style{
-		header:     lipgloss.NewStyle().Bold(true).Foreground(lipgloss.Color("43")).Padding(0, 1),
-		subheader:  lipgloss.NewStyle().Foreground(sub).Padding(0, 1),
-		status:     lipgloss.NewStyle().Foreground(sub),
-		userMsg:    lipgloss.NewStyle().Foreground(lipgloss.Color("255")).Padding(0, 2),
-		userPrefix: lipgloss.NewStyle().Bold(true).Foreground(cyan).SetString("┃ You "),
-		asstMsg:    lipgloss.NewStyle().Foreground(lipgloss.Color("252")).Padding(0, 2),
-		asstPrefix: lipgloss.NewStyle().Bold(true).Foreground(teal).SetString("Δ "),
-		codeBg:     lipgloss.NewStyle().Background(dk).Foreground(lipgloss.Color("252")).Padding(0, 1),
-		codeLabel:  lipgloss.NewStyle().Background(dk).Foreground(sub).Padding(0, 1),
-		system:     lipgloss.NewStyle().Foreground(sub).Italic(true).Padding(0, 2),
-		separator:  lipgloss.NewStyle().Foreground(gray),
-		footKey:    lipgloss.NewStyle().Foreground(cyan).Bold(true),
-		footDesc:   lipgloss.NewStyle().Foreground(sub),
-		errMsg:     lipgloss.NewStyle().Foreground(lipgloss.Color("196")).Padding(0, 2),
-		dim:        lipgloss.NewStyle().Foreground(sub),
-		border:     lipgloss.NewStyle().Foreground(lipgloss.Color("237")),
-		meter:      lipgloss.NewStyle().Foreground(lipgloss.Color("214")).Padding(0, 1),
+	g := lipgloss.Color("240")
+	return st{
+		header: lipgloss.NewStyle().Bold(true).Foreground(lipgloss.Color("43")).Padding(0, 1),
+		subh:  lipgloss.NewStyle().Foreground(sub).Padding(0, 1),
+		status: lipgloss.NewStyle().Foreground(sub),
+		userMsg: lipgloss.NewStyle().Foreground(lipgloss.Color("255")).Padding(0, 2),
+		userPr: lipgloss.NewStyle().Bold(true).Foreground(c).SetString("┃ You "),
+		asstMsg: lipgloss.NewStyle().Padding(0, 2),
+		asstPr: lipgloss.NewStyle().Bold(true).Foreground(t).SetString("Δ "),
+		sysMsg: lipgloss.NewStyle().Foreground(sub).Italic(true).Padding(0, 2),
+		sep: lipgloss.NewStyle().Foreground(g),
+		fk: lipgloss.NewStyle().Foreground(c).Bold(true),
+		fd: lipgloss.NewStyle().Foreground(sub),
+		errMsg: lipgloss.NewStyle().Foreground(lipgloss.Color("196")).Padding(0, 2),
+		dim: lipgloss.NewStyle().Foreground(sub),
+		brd: lipgloss.NewStyle().Foreground(lipgloss.Color("237")),
+		scroll: lipgloss.NewStyle().Background(lipgloss.Color("235")).Foreground(lipgloss.Color("214")).Padding(0, 1),
+		meta: lipgloss.NewStyle().Foreground(lipgloss.Color("238")).Padding(0, 2),
+		logo: lipgloss.NewStyle().Foreground(lipgloss.Color("43")),
 	}
 }
 
@@ -78,32 +80,40 @@ type streamMsg struct {
 	err     error
 }
 
-type chatModel struct {
-	ready        bool
-	viewport     viewport.Model
-	textarea     textarea.Model
-	spinner      spinner.Model
-	st           style
-	cfg          *config.Manager
-	ctxEng       *context.Engine
-	mem          *memory.ProjectMemory
-	vector       *memory.VectorMemory
-	skills       *skill.Engine
-	router       *router.Router
+type tickMsg struct{}
 
-	messages     []chatMessage
-	width        int
-	height       int
-	statusText   string
-	modelName    string
-	provName     string
-	isStreaming  bool
-	streamBuf    strings.Builder
-	streamCh     chan streamMsg
-	cost         float64
-	tokens       int
-	sessionID    int64
-	lastPrompt   string
+type chatModel struct {
+	ready       bool
+	vp          viewport.Model
+	ta          textarea.Model
+	sp          spinner.Model
+	st          st
+	cfg         *config.Manager
+	ctxEng      *context.Engine
+	mem         *memory.ProjectMemory
+	vector      *memory.VectorMemory
+	skills      *skill.Engine
+	router      *router.Router
+
+	msgs        []chatMessage
+	w           int
+	h           int
+	statusText  string
+	modelName   string
+	provName    string
+	streaming   bool
+	sb          strings.Builder
+	streamCh    chan streamMsg
+	cost        float64
+	tok         int
+	sid         int64
+	lastPrompt  string
+	startTime   time.Time
+	glam        *glamour.TermRenderer
+
+	dotTick     int
+	scrollTop   int
+	atBottom    bool
 }
 
 func NewChatModel(cfg *config.Manager) chatModel {
@@ -112,7 +122,7 @@ func NewChatModel(cfg *config.Manager) chatModel {
 	s.Style = lipgloss.NewStyle().Foreground(lipgloss.Color("43"))
 
 	ta := textarea.New()
-	ta.Placeholder = "Ask Delta to build anything...  (Shift+Enter for newline, Enter to send)"
+	ta.Placeholder = "  Ask Delta to build anything..."
 	ta.Prompt = "┃ "
 	ta.CharLimit = 0
 	ta.ShowLineNumbers = false
@@ -121,31 +131,50 @@ func NewChatModel(cfg *config.Manager) chatModel {
 
 	vp := viewport.New(80, 20)
 
-	st := defaultStyle()
+	g, _ := glamour.NewTermRenderer(
+		glamour.WithAutoStyle(),
+		glamour.WithWordWrap(78),
+	)
 
 	m := chatModel{
-		viewport:   vp,
-		textarea:   ta,
-		spinner:    s,
-		st:         st,
-		cfg:        cfg,
+		vp:        vp,
+		ta:        ta,
+		sp:        s,
+		st:        newStyle(),
+		cfg:       cfg,
 		statusText: "Ready",
-		modelName:  cfg.GetConfig().DefaultModel,
-		provName:   cfg.GetConfig().DefaultProvider,
-		ready:      true,
-		width:      80,
-		height:     24,
+		modelName: cfg.GetConfig().DefaultModel,
+		provName:  cfg.GetConfig().DefaultProvider,
+		ready:     true,
+		w:         80,
+		h:         24,
+		glam:      g,
+		atBottom:  true,
 	}
 
-	m.viewport.Width = 78
-	m.viewport.Height = 14
-	m.textarea.SetWidth(74)
-	m.textarea.SetHeight(3)
+	m.vp.Width = 78
+	m.vp.Height = 15
+	m.ta.SetWidth(74)
+	m.ta.SetHeight(3)
+	m.renderMsgs()
 
 	m.initSubsystems()
-	m.appendSystem("Δ Delta Code — The Self-Evolving BYOK Coding Agent")
-	m.appendSystem(fmt.Sprintf("Model: %s  |  Provider: %s", m.modelName, m.provName))
-	m.appendSystem("Type your prompt below and press Enter to begin.")
+	m.msgs = append(m.msgs, chatMessage{role: "system", content: ""})
+	m.msgs = append(m.msgs, chatMessage{role: "system", content: m.st.logo.Render(
+		"      ██████╗ ███████╗██╗  ████████╗ █████╗")})
+	m.msgs = append(m.msgs, chatMessage{role: "system", content: m.st.logo.Render(
+		"      ██╔══██╗██╔════╝██║  ╚══██╔══╝██╔══██╗")})
+	m.msgs = append(m.msgs, chatMessage{role: "system", content: m.st.logo.Render(
+		"      ██║  ██║█████╗  ██║     ██║   ███████║")})
+	m.msgs = append(m.msgs, chatMessage{role: "system", content: m.st.logo.Render(
+		"      ██║  ██║██╔══╝  ██║     ██║   ██╔══██║")})
+	m.msgs = append(m.msgs, chatMessage{role: "system", content: m.st.logo.Render(
+		"      ██████╔╝███████╗███████╗██║   ██║  ██║")})
+	m.msgs = append(m.msgs, chatMessage{role: "system", content: m.st.logo.Render(
+		"      ╚═════╝ ╚══════╝╚══════╝╚═╝   ╚═╝  ╚═╝")})
+	m.msgs = append(m.msgs, chatMessage{role: "system", content: ""})
+	m.appendSys(fmt.Sprintf("Model: %s  •  Provider: %s", m.modelName, m.provName))
+	m.appendSys("Type your prompt below and press Enter to begin.")
 
 	return m
 }
@@ -154,7 +183,7 @@ func (m *chatModel) initSubsystems() {
 	m.ctxEng, _ = context.NewEngine()
 	if mem, err := memory.NewProjectMemory(); err == nil {
 		m.mem = mem
-		m.sessionID, _ = mem.CreateSession("tui-session")
+		m.sid, _ = mem.CreateSession("tui-session")
 	}
 	if v, err := memory.NewVectorMemory(); err == nil {
 		m.vector = v
@@ -167,7 +196,7 @@ func (m *chatModel) initSubsystems() {
 }
 
 func (m chatModel) Init() tea.Cmd {
-	return tea.Batch(m.spinner.Tick, textarea.Blink)
+	return tea.Batch(m.sp.Tick, textarea.Blink)
 }
 
 func (m chatModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
@@ -175,124 +204,155 @@ func (m chatModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case tea.WindowSizeMsg:
 		m.handleResize(msg)
 		return &m, nil
-
 	case tea.KeyMsg:
-		if m.isStreaming {
+		if m.streaming {
 			return &m, nil
 		}
 		return m.handleKey(msg)
-
 	case spinner.TickMsg:
 		var cmd tea.Cmd
-		m.spinner, cmd = m.spinner.Update(msg)
+		m.sp, cmd = m.sp.Update(msg)
 		return &m, cmd
-
 	case streamMsg:
-		return m.handleStreamMsg(msg)
+		return m.handleStream(msg)
+	case tickMsg:
+		m.dotTick = (m.dotTick + 1) % 4
+		m.renderMsgs()
+		if m.streaming {
+			return &m, m.tick()
+		}
 	}
-
 	var cmd tea.Cmd
-	m.viewport, cmd = m.viewport.Update(msg)
+	m.vp, cmd = m.vp.Update(msg)
 	return &m, cmd
 }
 
 func (m *chatModel) handleResize(msg tea.WindowSizeMsg) {
-	m.width = msg.Width
-	m.height = msg.Height
-
-	inputH := 4
-	statusH := 2
-	footerH := 1
-	margin := inputH + statusH + footerH + 4
-	vpHeight := m.height - margin
-	if vpHeight < 5 {
-		vpHeight = 5
+	m.w = msg.Width
+	m.h = msg.Height
+	vpH := m.h - 9
+	if vpH < 5 {
+		vpH = 5
 	}
-
-	m.viewport.Width = msg.Width - 2
-	m.viewport.Height = vpHeight
-
-	m.textarea.SetWidth(msg.Width - 6)
-	m.textarea.SetHeight(3)
-
+	m.vp.Width = msg.Width - 2
+	m.vp.Height = vpH
+	m.ta.SetWidth(msg.Width - 6)
+	m.ta.SetHeight(3)
 	if !m.ready {
 		m.ready = true
 	}
-	m.refreshViewport()
+	m.renderMsgs()
 }
 
 func (m *chatModel) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	switch msg.String() {
 	case "ctrl+c":
 		return m, tea.Quit
-
 	case "enter":
-		text := strings.TrimSpace(m.textarea.Value())
-		if text == "" {
+		t := strings.TrimSpace(m.ta.Value())
+		if t == "" {
 			return m, nil
 		}
-		m.textarea.Reset()
-		m.textarea.Blur()
-		return m, m.submitPrompt(text)
-
-	case "tab":
-		if m.textarea.Focused() {
-			m.textarea.Blur()
-		} else {
-			m.textarea.Focus()
+		if strings.HasPrefix(t, "/") {
+			return m, m.handleSlash(t)
 		}
-
+		m.ta.Reset()
+		m.ta.Blur()
+		return m, m.submitPrompt(t)
+	case "tab":
+		if m.ta.Focused() {
+			m.ta.Blur()
+		} else {
+			m.ta.Focus()
+		}
 	case "ctrl+l":
-		m.messages = nil
-		m.refreshViewport()
-
+		m.msgs = nil
+		m.renderMsgs()
 	case "ctrl+w":
-		m.textarea.Reset()
+		m.ta.Reset()
+	case "up", "down", "pgup", "pgdown":
+		var cmd tea.Cmd
+		m.vp, cmd = m.vp.Update(msg)
+		return m, cmd
 	}
 
-	if !m.textarea.Focused() {
-		m.textarea.Focus()
+	if !m.ta.Focused() {
+		m.ta.Focus()
 	}
-
 	var cmd tea.Cmd
-	m.textarea, cmd = m.textarea.Update(msg)
+	m.ta, cmd = m.ta.Update(msg)
+	if m.vp.ScrollPercent() >= 0.99 {
+		m.atBottom = true
+	} else {
+		m.atBottom = false
+	}
+
 	return m, cmd
+}
+
+func (m *chatModel) handleSlash(cmd string) tea.Cmd {
+	parts := strings.Fields(strings.ToLower(cmd))
+	switch parts[0] {
+	case "/clear":
+		m.msgs = nil
+		m.renderMsgs()
+		m.ta.Reset()
+		return nil
+	case "/help":
+		m.appendSys("Available: /clear  /model <name>  /cost  /help")
+		return nil
+	case "/cost":
+		m.appendSys(fmt.Sprintf("Session cost: $%.4f  |  Tokens: %d", m.cost, m.tok))
+		return nil
+	case "/model":
+		if len(parts) > 1 {
+			conf := m.cfg.GetConfig()
+			conf.DefaultModel = parts[1]
+			m.modelName = parts[1]
+			m.appendSys(fmt.Sprintf("Switched to model: %s", parts[1]))
+		} else {
+			m.appendSys(fmt.Sprintf("Current model: %s", m.modelName))
+		}
+		return nil
+	}
+	m.appendSys(fmt.Sprintf("Unknown command: %s  (/help for list)", cmd))
+	return nil
 }
 
 func (m *chatModel) submitPrompt(prompt string) tea.Cmd {
 	m.lastPrompt = prompt
 	m.appendUser(prompt)
-	m.statusText = "Thinking..."
-	m.refreshViewport()
-	m.viewport.GotoBottom()
+	m.statusText = "Thinking"
+	m.startTime = time.Now()
+	m.renderMsgs()
+	m.vp.GotoBottom()
+	m.atBottom = true
 
 	conf := m.cfg.GetConfig()
 	pName, modelName := m.router.Route(prompt, conf.Providers)
 	m.modelName = modelName
 	m.provName = pName
-	m.isStreaming = true
-	m.streamBuf.Reset()
-	m.cost = 0
-	m.tokens = 0
+	m.streaming = true
+	m.sb.Reset()
 
 	provCfg, err := m.cfg.GetProvider(pName)
 	if err != nil {
 		provCfg, err = m.cfg.GetProvider(conf.DefaultProvider)
 		if err != nil {
-			m.isStreaming = false
+			m.streaming = false
 			m.statusText = "Error"
-			m.appendError("no provider configured. Use `delta provider add`")
-			m.viewport.GotoBottom()
+			m.appendErr("No provider configured. Use `delta provider add`")
+			m.vp.GotoBottom()
 			return nil
 		}
 	}
 
 	p, err := provider.NewProvider(*provCfg)
 	if err != nil {
-		m.isStreaming = false
+		m.streaming = false
 		m.statusText = "Error"
-		m.appendError(err.Error())
-		m.viewport.GotoBottom()
+		m.appendErr(err.Error())
+		m.vp.GotoBottom()
 		return nil
 	}
 
@@ -302,7 +362,7 @@ func (m *chatModel) submitPrompt(prompt string) tea.Cmd {
 	}
 
 	msgs := []models.Message{
-		{Role: models.RoleSystem, Content: "You are Delta Code, an expert software engineer. Write production-ready code. Be concise and precise."},
+		{Role: models.RoleSystem, Content: "You are Delta Code, an expert software engineer. Write production-ready code. Be concise and precise. Use markdown formatting with code blocks."},
 	}
 	if m.vector != nil {
 		results := m.vector.Search(prompt, 3)
@@ -347,10 +407,10 @@ func (m *chatModel) submitPrompt(prompt string) tea.Cmd {
 		ch <- streamMsg{done: true}
 	}()
 
-	return m.readStreamCmd()
+	return tea.Batch(m.readStream(), m.tick())
 }
 
-func (m *chatModel) readStreamCmd() tea.Cmd {
+func (m *chatModel) readStream() tea.Cmd {
 	return func() tea.Msg {
 		msg, ok := <-m.streamCh
 		if !ok {
@@ -360,41 +420,46 @@ func (m *chatModel) readStreamCmd() tea.Cmd {
 	}
 }
 
-func (m *chatModel) handleStreamMsg(msg streamMsg) (tea.Model, tea.Cmd) {
+func (m *chatModel) tick() tea.Cmd {
+	return tea.Tick(time.Millisecond*400, func(t time.Time) tea.Msg {
+		return tickMsg{}
+	})
+}
+
+func (m *chatModel) handleStream(msg streamMsg) (tea.Model, tea.Cmd) {
 	if msg.err != nil {
-		m.isStreaming = false
+		m.streaming = false
 		m.statusText = "Error"
-		m.appendError(msg.err.Error())
-		m.viewport.GotoBottom()
+		m.appendErr(msg.err.Error())
+		m.vp.GotoBottom()
 		m.streamCh = nil
 		return m, nil
 	}
-
 	if msg.done {
-		full := m.streamBuf.String()
-		m.isStreaming = false
+		full := m.sb.String()
+		m.streaming = false
 		m.statusText = "Ready"
 		if full != "" {
 			m.appendAssistant(full)
 		}
-		m.viewport.GotoBottom()
+		m.vp.GotoBottom()
 		m.storeMemory(m.lastPrompt, full)
 		m.streamCh = nil
-		m.textarea.Focus()
+		m.ta.Focus()
 		return m, nil
 	}
-
-	m.streamBuf.WriteString(msg.content)
-	m.appendStreaming(msg.content)
-	m.viewport.GotoBottom()
-
-	return m, m.readStreamCmd()
+	m.sb.WriteString(msg.content)
+	m.appendStream(msg.content)
+	if m.atBottom {
+		m.vp.GotoBottom()
+	}
+	return m, m.readStream()
 }
 
 func (m *chatModel) storeMemory(prompt, response string) {
 	if m.mem != nil {
-		m.mem.AddEntry(m.sessionID, "user", prompt, nil)
-		m.mem.AddEntry(m.sessionID, "assistant", response, map[string]any{"source": "tui"})
+		m.mem.AddEntry(m.sid, "user", prompt, nil)
+		m.mem.AddEntry(m.sid, "assistant", response, map[string]any{"source": "tui"})
 	}
 	if m.vector != nil {
 		m.vector.Store(fmt.Sprintf("Q: %s\nA: %s", prompt, response), extractTags(prompt))
@@ -430,58 +495,55 @@ func generateSkillName(prompt string) string {
 
 func (m chatModel) View() string {
 	if !m.ready {
-		return m.renderStarting()
+		return m.starting()
 	}
-
-	header := m.renderHeader(m.width)
-	sep := m.renderSep(m.width)
-	m.refreshViewport()
-	input := m.renderInput()
-	status := m.renderStatus(m.width)
-	footer := m.renderFooter(m.width)
-
-	lines := []string{header, sep, m.viewport.View(), input, status, footer}
-	return lipgloss.JoinVertical(lipgloss.Left, lines...)
-}
-
-func (m chatModel) renderStarting() string {
-	return fmt.Sprintf("%s\n%s\n  %s initializing...\n%s",
-		m.st.header.Render(" Δ Delta Code"),
-		m.st.separator.Render(strings.Repeat("─", 40)),
-		m.spinner.View(),
-		m.st.dim.Render("Loading subsystems..."),
+	m.renderMsgs()
+	return lipgloss.JoinVertical(lipgloss.Left,
+		m.renderHdr(m.w),
+		m.renderSep(m.w),
+		m.vp.View(),
+		m.renderInput(),
+		m.renderStatus(m.w),
+		m.renderFooter(m.w),
 	)
 }
 
-func (m chatModel) renderHeader(w int) string {
+func (m chatModel) starting() string {
+	return fmt.Sprintf("%s\n%s\n  %s initializing...",
+		m.st.header.Render(" Δ Delta Code"),
+		m.st.sep.Render(strings.Repeat("─", 40)),
+		m.sp.View(),
+	)
+}
+
+func (m chatModel) renderHdr(w int) string {
 	if w <= 0 {
 		w = 80
 	}
-	logo := m.st.header.Render(" Δ Delta Code ")
-	info := m.st.subheader.Render(fmt.Sprintf(" %s • %s ", m.modelName, m.provName))
-	timeStr := m.st.status.Render(time.Now().Format("15:04:05"))
-	sp := w - lipgloss.Width(logo) - lipgloss.Width(info) - lipgloss.Width(timeStr) - 4
+	logo := m.st.header.Render(" Δ ")
+	info := m.st.subh.Render(fmt.Sprintf(" %s • %s ", m.modelName, m.provName))
+	ts := m.st.status.Render(time.Now().Format("15:04:05"))
+	sp := w - lipgloss.Width(logo) - lipgloss.Width(info) - lipgloss.Width(ts) - 4
 	if sp < 1 {
 		sp = 1
 	}
-	return lipgloss.JoinHorizontal(lipgloss.Center, logo, strings.Repeat(" ", sp), info, timeStr)
+	return lipgloss.JoinHorizontal(lipgloss.Center, logo, strings.Repeat(" ", sp), info, ts)
 }
 
 func (m chatModel) renderSep(w int) string {
 	if w <= 0 {
 		w = 80
 	}
-	return m.st.separator.Render("─" + strings.Repeat("─", max(w-2, 0)) + "─")
+	return m.st.sep.Render("─" + strings.Repeat("─", max(w-2, 0)) + "─")
 }
 
 func (m chatModel) renderStatus(w int) string {
-	s := m.st
 	prefix := ""
-	if m.isStreaming {
-		prefix = m.spinner.View() + " "
+	if m.streaming {
+		prefix = m.sp.View() + " "
 	}
-	left := s.status.Render(fmt.Sprintf(" %s%s", prefix, m.statusText))
-	right := s.dim.Render(fmt.Sprintf("msgs: %d", len(m.messages)))
+	left := m.st.status.Render(fmt.Sprintf(" %s%s", prefix, m.statusText))
+	right := m.st.dim.Render(fmt.Sprintf("msgs:%d  $%.4f", len(m.msgs), m.cost))
 	sp := w - lipgloss.Width(left) - lipgloss.Width(right) - 2
 	if sp < 1 {
 		sp = 1
@@ -490,73 +552,129 @@ func (m chatModel) renderStatus(w int) string {
 }
 
 func (m chatModel) renderFooter(w int) string {
-	bindings := []struct{ key, desc string }{
+	bindings := []struct{ k, d string }{
 		{"Enter", "send"}, {"Tab", "focus"}, {"↑↓", "scroll"},
-		{"Ctrl+L", "clear"}, {"Ctrl+C", "quit"},
+		{"/help", "cmds"}, {"Ctrl+L", "clear"}, {"Ctrl+C", "quit"},
 	}
 	var parts []string
 	for _, b := range bindings {
-		parts = append(parts, m.st.footKey.Render(b.key)+" "+m.st.footDesc.Render(b.desc))
+		parts = append(parts, m.st.fk.Render(b.k)+" "+m.st.fd.Render(b.d))
 	}
-	line := strings.Join(parts, "   ")
-	return fmt.Sprintf("%s\n %s", m.st.border.Render(strings.Repeat("─", max(0, w-2))), line)
+	line := strings.Join(parts, "  ")
+	return fmt.Sprintf("%s\n %s", m.st.brd.Render(strings.Repeat("─", max(0, w-2))), line)
 }
 
 func (m chatModel) renderInput() string {
-	return m.textarea.View()
+	return m.ta.View()
 }
 
-func (m *chatModel) refreshViewport() {
+func (m *chatModel) renderMsgs() {
 	var out []string
 	s := m.st
 
-	for _, msg := range m.messages {
+	needsScroll := m.vp.ScrollPercent() > 0 && !m.atBottom
+	if needsScroll {
+		remain := m.vp.TotalLineCount() - m.vp.YOffset
+		out = append(out, s.scroll.Render(fmt.Sprintf(" ↑ %d more lines", remain)))
+		out = append(out, "")
+	}
+
+	for _, msg := range m.msgs {
 		switch msg.role {
 		case "user":
-			out = append(out, s.userPrefix.String())
+			out = append(out, s.userPr.String())
 			for _, line := range strings.Split(msg.content, "\n") {
 				out = append(out, s.userMsg.Render("  "+line))
 			}
 		case "assistant":
-			out = append(out, s.asstPrefix.String())
-			out = append(out, m.formatContent(msg.content, false))
+			out = append(out, s.asstPr.String())
+			rendered := m.renderMarkdown(msg.content)
+			out = append(out, rendered)
+			if msg.duration > 0 || msg.tokens > 0 {
+				meta := ""
+				if msg.duration > 0 {
+					meta += fmt.Sprintf("%.1fs", msg.duration.Seconds())
+				}
+				if msg.tokens > 0 {
+					if meta != "" {
+						meta += " · "
+					}
+					meta += fmt.Sprintf("%d tok", msg.tokens)
+				}
+				if msg.cost > 0 {
+					if meta != "" {
+						meta += " · "
+					}
+					meta += fmt.Sprintf("$%.4f", msg.cost)
+				}
+				out = append(out, s.meta.Render("  "+meta))
+			}
 		case "streaming":
-			out = append(out, s.asstPrefix.String())
-			rendered := m.formatContent(msg.content, true)
+			out = append(out, s.asstPr.String())
+			rendered := m.renderStreamContent(msg.content)
 			out = append(out, rendered)
 		case "system":
-			out = append(out, s.system.Render(" ◆ "+msg.content))
+			out = append(out, s.sysMsg.Render("   "+msg.content))
 		case "error":
-			out = append(out, s.errMsg.Render(" ✗ "+msg.content))
+			out = append(out, s.errMsg.Render("  ✗ "+msg.content))
 		}
 		out = append(out, "")
 	}
 
-	m.viewport.SetContent(strings.Join(out, "\n"))
+	if m.streaming {
+		dots := []string{"  ", " · ", " ·· ", " ···"}
+		d := dots[m.dotTick%len(dots)]
+		out = append(out, s.dim.Render("  thinking"+d))
+	}
+
+	m.vp.SetContent(strings.Join(out, "\n"))
 }
 
-func (m chatModel) formatContent(content string, streaming bool) string {
+func (m chatModel) renderMarkdown(content string) string {
+	if m.glam == nil {
+		return sAsstFallback(content)
+	}
+	out, err := m.glam.Render(content)
+	if err != nil || out == "" {
+		return sAsstFallback(content)
+	}
+	return out
+}
+
+func sAsstFallback(content string) string {
+	s := lipgloss.NewStyle().Padding(0, 2).Foreground(lipgloss.Color("252"))
+	var result []string
+	for _, line := range strings.Split(content, "\n") {
+		if strings.HasPrefix(line, "```") {
+			continue
+		}
+		result = append(result, s.Render("  "+line))
+	}
+	return strings.Join(result, "\n")
+}
+
+func (m chatModel) renderStreamContent(content string) string {
 	s := m.st
 	var result []string
 	lines := strings.Split(content, "\n")
 	inCode := false
-	var codeBuf []string
-	codeLang := ""
+	var cb []string
+	cl := ""
 
 	flush := func() {
-		if len(codeBuf) == 0 {
+		if len(cb) == 0 {
 			return
 		}
-		label := " code "
-		if codeLang != "" {
-			label = " " + codeLang + " "
+		l := " code "
+		if cl != "" {
+			l = " " + cl + " "
 		}
-		result = append(result, s.codeLabel.Render(label))
-		for _, cl := range codeBuf {
-			result = append(result, s.codeBg.Render("  "+cl))
+		result = append(result, s.dim.Render("  │ "+l))
+		for _, ln := range cb {
+			result = append(result, s.dim.Render("  │ "+ln))
 		}
-		codeBuf = nil
-		codeLang = ""
+		cb = nil
+		cl = ""
 	}
 
 	for _, line := range lines {
@@ -564,57 +682,54 @@ func (m chatModel) formatContent(content string, streaming bool) string {
 			flush()
 			inCode = !inCode
 			if inCode {
-				codeLang = strings.TrimSpace(strings.TrimPrefix(line, "```"))
+				cl = strings.TrimSpace(strings.TrimPrefix(line, "```"))
 			}
 			continue
 		}
 		if inCode {
-			codeBuf = append(codeBuf, line)
+			cb = append(cb, line)
 			continue
 		}
 		flush()
 		if line == "" {
 			result = append(result, "")
 		} else {
-			result = append(result, s.asstMsg.Render("  "+line))
+			result = append(result, s.dim.Render("  "+line))
 		}
 	}
 	flush()
 
-	if streaming {
-		result = append(result, s.dim.Render("  ▌"))
-	}
-
 	return strings.Join(result, "\n")
 }
 
-func (m *chatModel) appendUser(content string) {
-	m.messages = append(m.messages, chatMessage{role: "user", content: content})
-	m.refreshViewport()
+func (m *chatModel) appendUser(c string) {
+	m.msgs = append(m.msgs, chatMessage{role: "user", content: c})
+	m.renderMsgs()
 }
 
-func (m *chatModel) appendAssistant(content string) {
-	m.messages = append(m.messages, chatMessage{role: "assistant", content: content})
-	m.refreshViewport()
+func (m *chatModel) appendAssistant(c string) {
+	dur := time.Since(m.startTime)
+	m.msgs = append(m.msgs, chatMessage{role: "assistant", content: c, duration: dur, tokens: m.tok, cost: m.cost})
+	m.renderMsgs()
 }
 
-func (m *chatModel) appendStreaming(chunk string) {
-	if len(m.messages) > 0 && m.messages[len(m.messages)-1].role == "streaming" {
-		m.messages[len(m.messages)-1].content += chunk
+func (m *chatModel) appendStream(c string) {
+	if len(m.msgs) > 0 && m.msgs[len(m.msgs)-1].role == "streaming" {
+		m.msgs[len(m.msgs)-1].content += c
 	} else {
-		m.messages = append(m.messages, chatMessage{role: "streaming", content: chunk})
+		m.msgs = append(m.msgs, chatMessage{role: "streaming", content: c})
 	}
-	m.refreshViewport()
+	m.renderMsgs()
 }
 
-func (m *chatModel) appendSystem(content string) {
-	m.messages = append(m.messages, chatMessage{role: "system", content: content})
-	m.refreshViewport()
+func (m *chatModel) appendSys(c string) {
+	m.msgs = append(m.msgs, chatMessage{role: "system", content: c})
+	m.renderMsgs()
 }
 
-func (m *chatModel) appendError(content string) {
-	m.messages = append(m.messages, chatMessage{role: "error", content: content})
-	m.refreshViewport()
+func (m *chatModel) appendErr(c string) {
+	m.msgs = append(m.msgs, chatMessage{role: "error", content: c})
+	m.renderMsgs()
 }
 
 func max(a, b int) int {
