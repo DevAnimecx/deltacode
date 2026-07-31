@@ -14,9 +14,9 @@ type StreamRenderer interface {
 }
 
 type TerminalRenderer struct {
-	writer  io.Writer
-	buffer  strings.Builder
-	model   string
+	writer io.Writer
+	buffer strings.Builder
+	model  string
 }
 
 func NewTerminalRenderer(w io.Writer) *TerminalRenderer {

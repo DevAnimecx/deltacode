@@ -4,8 +4,8 @@ import (
 	"fmt"
 	"os"
 
-	"github.com/DevAnimecx/deltacode/internal/config"
 	"github.com/DevAnimecx/deltacode/internal/cli/tui"
+	"github.com/DevAnimecx/deltacode/internal/config"
 	"github.com/DevAnimecx/deltacode/internal/setup"
 	"github.com/spf13/cobra"
 )

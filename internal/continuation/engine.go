@@ -10,14 +10,14 @@ import (
 type ErrorClass string
 
 const (
-	ClassTransientAPI     ErrorClass = "transient_api"       // network blips, 5xx, rate limits
-	ClassModelTimeout     ErrorClass = "model_timeout"        // provider/model took too long
-	ClassToolCrash        ErrorClass = "tool_crash"           // tool dependency missing/crashed
-	ClassValidation       ErrorClass = "validation_failure"   // build/lint/test/security failed
-	ClassApproval         ErrorClass = "approval_required"    // needs user decision
-	ClassPolicy           ErrorClass = "policy_denied"        // denied by policy
-	ClassEmptyOutput      ErrorClass = "empty_output"         // model returned nothing usable
-	ClassFatal            ErrorClass = "fatal"                // unrecoverable, stop
+	ClassTransientAPI ErrorClass = "transient_api"      // network blips, 5xx, rate limits
+	ClassModelTimeout ErrorClass = "model_timeout"      // provider/model took too long
+	ClassToolCrash    ErrorClass = "tool_crash"         // tool dependency missing/crashed
+	ClassValidation   ErrorClass = "validation_failure" // build/lint/test/security failed
+	ClassApproval     ErrorClass = "approval_required"  // needs user decision
+	ClassPolicy       ErrorClass = "policy_denied"      // denied by policy
+	ClassEmptyOutput  ErrorClass = "empty_output"       // model returned nothing usable
+	ClassFatal        ErrorClass = "fatal"              // unrecoverable, stop
 )
 
 // Classified describes an error and its recovery options.
@@ -54,13 +54,13 @@ func Classify(err error) Classified {
 			return Classified{
 				Class: ClassTransientAPI, Message: err.Error(), Retryable: true,
 				Strategy: "transient provider failure — retry with backoff, then fall back to another provider",
-				Backoff: 1 * time.Second, MaxAttempts: 3,
+				Backoff:  1 * time.Second, MaxAttempts: 3,
 			}
 		}
 		return Classified{
 			Class: ClassTransientAPI, Message: err.Error(), Retryable: true,
 			Strategy: "connectivity failure — retry after backoff, then alternate provider",
-			Backoff: 2 * time.Second, MaxAttempts: 3,
+			Backoff:  2 * time.Second, MaxAttempts: 3,
 		}
 
 	case strings.Contains(msg, "timed out") ||
@@ -69,7 +69,7 @@ func Classify(err error) Classified {
 		return Classified{
 			Class: ClassModelTimeout, Message: err.Error(), Retryable: true,
 			Strategy: "model timeout — retry once with a faster model, then split the task",
-			Backoff: 500 * time.Millisecond, MaxAttempts: 2,
+			Backoff:  500 * time.Millisecond, MaxAttempts: 2,
 		}
 
 	case strings.Contains(msg, "not found") ||
@@ -80,7 +80,7 @@ func Classify(err error) Classified {
 		return Classified{
 			Class: ClassToolCrash, Message: err.Error(), Retryable: false,
 			Strategy: "tool crashed or missing dependency — install missing tool or use an alternative tool",
-			Backoff: 0, MaxAttempts: 1,
+			Backoff:  0, MaxAttempts: 1,
 		}
 
 	case strings.Contains(msg, "requires approval") ||
@@ -88,7 +88,7 @@ func Classify(err error) Classified {
 		return Classified{
 			Class: ClassApproval, Message: err.Error(), Retryable: false,
 			Strategy: "approval required — ask the user via delta policy tool-allow",
-			Backoff: 0, MaxAttempts: 1,
+			Backoff:  0, MaxAttempts: 1,
 		}
 
 	case strings.Contains(msg, "denied") ||
@@ -96,7 +96,7 @@ func Classify(err error) Classified {
 		return Classified{
 			Class: ClassPolicy, Message: err.Error(), Retryable: false,
 			Strategy: "policy denied — user must adjust policy",
-			Backoff: 0, MaxAttempts: 1,
+			Backoff:  0, MaxAttempts: 1,
 		}
 
 	case strings.Contains(msg, "empty output") ||
@@ -104,7 +104,7 @@ func Classify(err error) Classified {
 		return Classified{
 			Class: ClassEmptyOutput, Message: err.Error(), Retryable: true,
 			Strategy: "model returned empty output — retry with more explicit instructions",
-			Backoff: 300 * time.Millisecond, MaxAttempts: 2,
+			Backoff:  300 * time.Millisecond, MaxAttempts: 2,
 		}
 
 	case strings.Contains(msg, "validation") ||
@@ -112,24 +112,24 @@ func Classify(err error) Classified {
 		return Classified{
 			Class: ClassValidation, Message: err.Error(), Retryable: true,
 			Strategy: "validation failed — feed errors back to the agent and re-run",
-			Backoff: 500 * time.Millisecond, MaxAttempts: 2,
+			Backoff:  500 * time.Millisecond, MaxAttempts: 2,
 		}
 
 	default:
 		return Classified{
 			Class: ClassFatal, Message: err.Error(), Retryable: false,
 			Strategy: "unclassified error — record and continue with remaining tasks",
-			Backoff: 0, MaxAttempts: 1,
+			Backoff:  0, MaxAttempts: 1,
 		}
 	}
 }
 
 // RetryPolicy decides whether and how to retry based on attempts so far.
 type RetryPolicy struct {
-	Enabled    bool
+	Enabled     bool
 	MaxAttempts int
-	Backoff    time.Duration
-	Multiply   time.Duration // exponential factor
+	Backoff     time.Duration
+	Multiply    time.Duration // exponential factor
 }
 
 // PolicyFor returns the retry policy for a class.

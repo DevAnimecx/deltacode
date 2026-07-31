@@ -64,13 +64,13 @@ type googlePart struct {
 }
 
 type googleContent struct {
-	Role  string        `json:"role,omitempty"`
-	Parts []googlePart  `json:"parts"`
+	Role  string       `json:"role,omitempty"`
+	Parts []googlePart `json:"parts"`
 }
 
 type googleRequest struct {
-	Contents          []googleContent  `json:"contents"`
-	SystemInstruction *googleContent   `json:"system_instruction,omitempty"`
+	Contents          []googleContent `json:"contents"`
+	SystemInstruction *googleContent  `json:"system_instruction,omitempty"`
 	GenerationConfig  struct {
 		MaxOutputTokens int     `json:"maxOutputTokens,omitempty"`
 		Temperature     float64 `json:"temperature,omitempty"`

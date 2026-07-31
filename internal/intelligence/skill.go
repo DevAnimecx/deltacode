@@ -64,16 +64,16 @@ func (e *SkillEngine) load() {
 func (e *SkillEngine) Save(name, description string, tags, triggers []string, planJSON json.RawMessage) (*Skill, error) {
 	id := fmt.Sprintf("skill-%d", time.Now().UnixNano())
 	skill := Skill{
-		ID:           id,
-		Name:         name,
-		Description:  description,
-		Version:      1,
-		Tags:         tags,
-		Triggers:     triggers,
-		Plan:         planJSON,
-		UsageCount:   1,
-		CreatedAt:    time.Now(),
-		UpdatedAt:    time.Now(),
+		ID:          id,
+		Name:        name,
+		Description: description,
+		Version:     1,
+		Tags:        tags,
+		Triggers:    triggers,
+		Plan:        planJSON,
+		UsageCount:  1,
+		CreatedAt:   time.Now(),
+		UpdatedAt:   time.Now(),
 	}
 
 	data, err := json.MarshalIndent(skill, "", "  ")

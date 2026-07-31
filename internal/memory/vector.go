@@ -20,16 +20,16 @@ type VectorMemory struct {
 }
 
 type VectorEntry struct {
-	ID        string    `json:"id"`
-	Content   string    `json:"content"`
-	Tags      []string  `json:"tags"`
-	CreatedAt time.Time `json:"created_at"`
+	ID        string             `json:"id"`
+	Content   string             `json:"content"`
+	Tags      []string           `json:"tags"`
+	CreatedAt time.Time          `json:"created_at"`
 	Tokens    map[string]float64 `json:"-"`
 }
 
 type SearchResult struct {
-	Entry   VectorEntry
-	Score   float64
+	Entry VectorEntry
+	Score float64
 }
 
 func NewVectorMemory() (*VectorMemory, error) {

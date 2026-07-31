@@ -25,6 +25,7 @@ Thumbs.db
 # Delta
 .delta/
 .delta-project/
+.delta-repointel.json
 
 # Releases
 releases/

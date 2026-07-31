@@ -57,18 +57,18 @@ func (m *model) streamWorker(ch chan chunk, stop *stopOnce, req models.ChatReque
 			}
 			return
 		}
-		if raw.Done {
-			break
-		}
 		if raw.Content != "" {
 			hadContent = true
 		}
 		if raw.Reasoning != "" || raw.Content != "" {
 			select {
-			case ch <- chunk{content: raw.Content, reasoning: raw.Reasoning}:
+			case ch <- chunk{content: raw.Content, reasoning: raw.Reasoning, usage: raw.Usage}:
 			case <-stop.ch:
 				return
 			}
+		}
+		if raw.Done {
+			break
 		}
 	}
 

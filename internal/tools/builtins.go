@@ -6,19 +6,19 @@ import "time"
 func (r *Registry) builtin(id, name, category, desc string, perms []Permission, timeout int, retry int, run ToolFunc) {
 	platform := []string{"all"}
 	m := Manifest{
-		ID:           id,
-		Name:         name,
-		Version:      "1.0.0",
-		Author:       "delta",
-		Description:  desc,
-		Category:     category,
-		Permissions:  perms,
-		Platform:     platform,
-		TimeoutSec:   timeout,
-		Retry:        retry,
-		TrustLevel:   "trusted",
-		Source:       "builtin",
-		LastUpdated:  time.Now(),
+		ID:          id,
+		Name:        name,
+		Version:     "1.0.0",
+		Author:      "delta",
+		Description: desc,
+		Category:    category,
+		Permissions: perms,
+		Platform:    platform,
+		TimeoutSec:  timeout,
+		Retry:       retry,
+		TrustLevel:  "trusted",
+		Source:      "builtin",
+		LastUpdated: time.Now(),
 	}
 	if m.TimeoutSec == 0 {
 		m.TimeoutSec = 30

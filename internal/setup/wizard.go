@@ -43,10 +43,10 @@ func RunWizard(cfg *config.Manager) {
 	fmt.Println()
 	fmt.Println("  Supported providers:")
 	providerList := []struct {
-		num int
-		name string
-		desc string
-		url string
+		num    int
+		name   string
+		desc   string
+		url    string
 		models string
 	}{
 		{1, "OpenAI", "GPT-4o, GPT-4o-mini", "https://api.openai.com/v1", "gpt-4o,gpt-4o-mini,gpt-4-turbo"},

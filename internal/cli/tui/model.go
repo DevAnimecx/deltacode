@@ -64,27 +64,27 @@ func defTheme() theme {
 	t := lipgloss.Color("37")
 	s := lipgloss.Color("244")
 	return theme{
-		head: lipgloss.NewStyle().Bold(true).Foreground(c).Padding(0, 1),
-		subh: lipgloss.NewStyle().Foreground(s).Padding(0, 1),
-		stat: lipgloss.NewStyle().Foreground(s),
-		uM:   lipgloss.NewStyle().Foreground(lipgloss.Color("255")).Padding(0, 2),
-		uP:   lipgloss.NewStyle().Bold(true).Foreground(c).SetString("┃ You "),
-		aM:   lipgloss.NewStyle().Padding(0, 2),
-		aP:   lipgloss.NewStyle().Bold(true).Foreground(t).SetString("Δ "),
-		sysM: lipgloss.NewStyle().Foreground(s).Italic(true).Padding(0, 2),
-		sep:  lipgloss.NewStyle().Foreground(lipgloss.Color("240")),
-		fk:   lipgloss.NewStyle().Foreground(c).Bold(true),
-		fd:   lipgloss.NewStyle().Foreground(s),
-		errM: lipgloss.NewStyle().Foreground(lipgloss.Color("196")).Padding(0, 2),
-		dim:  lipgloss.NewStyle().Foreground(s),
-		brd:  lipgloss.NewStyle().Foreground(lipgloss.Color("237")),
-		scr:  lipgloss.NewStyle().Background(lipgloss.Color("235")).Foreground(lipgloss.Color("214")).Padding(0, 1),
-		meta: lipgloss.NewStyle().Foreground(lipgloss.Color("238")).Padding(0, 2),
-		logo: lipgloss.NewStyle().Foreground(lipgloss.Color("43")),
+		head:   lipgloss.NewStyle().Bold(true).Foreground(c).Padding(0, 1),
+		subh:   lipgloss.NewStyle().Foreground(s).Padding(0, 1),
+		stat:   lipgloss.NewStyle().Foreground(s),
+		uM:     lipgloss.NewStyle().Foreground(lipgloss.Color("255")).Padding(0, 2),
+		uP:     lipgloss.NewStyle().Bold(true).Foreground(c).SetString("┃ You "),
+		aM:     lipgloss.NewStyle().Padding(0, 2),
+		aP:     lipgloss.NewStyle().Bold(true).Foreground(t).SetString("Δ "),
+		sysM:   lipgloss.NewStyle().Foreground(s).Italic(true).Padding(0, 2),
+		sep:    lipgloss.NewStyle().Foreground(lipgloss.Color("240")),
+		fk:     lipgloss.NewStyle().Foreground(c).Bold(true),
+		fd:     lipgloss.NewStyle().Foreground(s),
+		errM:   lipgloss.NewStyle().Foreground(lipgloss.Color("196")).Padding(0, 2),
+		dim:    lipgloss.NewStyle().Foreground(s),
+		brd:    lipgloss.NewStyle().Foreground(lipgloss.Color("237")),
+		scr:    lipgloss.NewStyle().Background(lipgloss.Color("235")).Foreground(lipgloss.Color("214")).Padding(0, 1),
+		meta:   lipgloss.NewStyle().Foreground(lipgloss.Color("238")).Padding(0, 2),
+		logo:   lipgloss.NewStyle().Foreground(lipgloss.Color("43")),
 		codeBg: lipgloss.NewStyle().Background(lipgloss.Color("236")).Foreground(lipgloss.Color("252")).Padding(0, 1),
-		codeL: lipgloss.NewStyle().Background(lipgloss.Color("236")).Foreground(s).Padding(0, 1),
-		badge: lipgloss.NewStyle().Background(lipgloss.Color("237")).Foreground(lipgloss.Color("43")).Padding(0, 1),
-		link:  lipgloss.NewStyle().Foreground(lipgloss.Color("43")).Underline(true),
+		codeL:  lipgloss.NewStyle().Background(lipgloss.Color("236")).Foreground(s).Padding(0, 1),
+		badge:  lipgloss.NewStyle().Background(lipgloss.Color("237")).Foreground(lipgloss.Color("43")).Padding(0, 1),
+		link:   lipgloss.NewStyle().Foreground(lipgloss.Color("43")).Underline(true),
 	}
 }
 
@@ -126,7 +126,7 @@ type dropdown struct {
 }
 
 type toastMsg struct {
-	text string
+	text  string
 	until time.Time
 }
 
@@ -159,16 +159,16 @@ func (m *model) confirmAndReset(action string) bool {
 }
 
 type model struct {
-	vp       viewport.Model
-	ta       textarea.Model
-	sp       spinner.Model
-	t        theme
-	cfg      *config.Manager
-	ctxEng   *context.Engine
-	mem      *memory.ProjectMemory
-	vector   *memory.VectorMemory
-	skills   *skill.Engine
-	rtr      *router.Router
+	vp     viewport.Model
+	ta     textarea.Model
+	sp     spinner.Model
+	t      theme
+	cfg    *config.Manager
+	ctxEng *context.Engine
+	mem    *memory.ProjectMemory
+	vector *memory.VectorMemory
+	skills *skill.Engine
+	rtr    *router.Router
 
 	entries    []entry
 	messages   []models.Message
@@ -194,26 +194,26 @@ type model struct {
 	stopCh       chan struct{}
 	quitConfirm  bool
 
-	dd           dropdown
-	ddInput      string
-	themeIdx     int
-	scrollLocked bool
+	dd               dropdown
+	ddInput          string
+	themeIdx         int
+	scrollLocked     bool
 	reasoningVisible bool
-	collapseLong bool
-	minimal      bool
-	wrapEnabled  bool
-	sessionTitle string
-	lastError    error
-	toast        *toastMsg
-	stopOnce     *stopOnce
-	exchanges    int
-	tipsShown    bool
-	statIdx      int
-	confirmed    bool
-	confirmAction string
-	sessions     []sessionMeta
-	wsData       *workspace
-	helpShown    bool
+	collapseLong     bool
+	minimal          bool
+	wrapEnabled      bool
+	sessionTitle     string
+	lastError        error
+	toast            *toastMsg
+	stopOnce         *stopOnce
+	exchanges        int
+	tipsShown        bool
+	statIdx          int
+	confirmed        bool
+	confirmAction    string
+	sessions         []sessionMeta
+	wsData           *workspace
+	helpShown        bool
 }
 
 func NewChatModel(cfg *config.Manager) *model {
@@ -238,15 +238,15 @@ func NewChatModel(cfg *config.Manager) *model {
 
 	m := &model{
 		vp: vp, ta: ta, sp: s, t: defTheme(), cfg: cfg,
-		statusText:   "Ready",
-		modelName:    cfg.GetConfig().DefaultModel,
-		provName:     cfg.GetConfig().DefaultProvider,
-		w: 80, h: 24, glam: g, atBottom: true,
-		inputHistory: []string{},
-		historyIdx:   -1,
+		statusText: "Ready",
+		modelName:  cfg.GetConfig().DefaultModel,
+		provName:   cfg.GetConfig().DefaultProvider,
+		w:          80, h: 24, glam: g, atBottom: true,
+		inputHistory:     []string{},
+		historyIdx:       -1,
 		reasoningVisible: true,
-		collapseLong: true,
-		wrapEnabled:  true,
+		collapseLong:     true,
+		wrapEnabled:      true,
 	}
 
 	m.vp.Width = 78

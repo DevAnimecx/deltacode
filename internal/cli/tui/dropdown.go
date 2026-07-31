@@ -61,9 +61,9 @@ func (m *model) openDropdown(kind dropdownKind) {
 			}
 			seen[mod] = true
 			items = append(items, ddItem{
-				label: mod,
-				value: mod,
-				desc:  "select model",
+				label:    mod,
+				value:    mod,
+				desc:     "select model",
 				selected: mod == m.modelName,
 			})
 		}
@@ -87,9 +87,9 @@ func (m *model) openDropdown(kind dropdownKind) {
 		var items []ddItem
 		for _, p := range conf.Providers {
 			items = append(items, ddItem{
-				label: p.Name,
-				value: p.Name,
-				desc:  p.BaseURL,
+				label:    p.Name,
+				value:    p.Name,
+				desc:     p.BaseURL,
 				selected: p.Name == m.provName,
 			})
 		}

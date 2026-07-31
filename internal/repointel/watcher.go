@@ -81,15 +81,15 @@ func loadStore(path string) *Store {
 
 // Watcher polls the repository and reports changes incrementally.
 type Watcher struct {
-	mu       sync.Mutex
-	cfg      WatchConfig
-	state    *Store
-	indexer  *symbols.Indexer
+	mu        sync.Mutex
+	cfg       WatchConfig
+	state     *Store
+	indexer   *symbols.Indexer
 	statePath string
-	stop     chan struct{}
-	changed  chan Change
-	errors   chan error
-	running  bool
+	stop      chan struct{}
+	changed   chan Change
+	errors    chan error
+	running   bool
 }
 
 // NewWatcher creates a watcher for root; state persists at ~/.delta/repointel.json.
@@ -276,9 +276,9 @@ func (w *Watcher) checkFile(rel string, info os.FileInfo) {
 
 func (w *Watcher) snapshotLocked(rel string, info os.FileInfo) *FileState {
 	fs := &FileState{
-		Path:   rel,
-		Size:   info.Size(),
-		Mtime:  info.ModTime(),
+		Path:    rel,
+		Size:    info.Size(),
+		Mtime:   info.ModTime(),
 		Indexed: true,
 	}
 	if info.Size() <= w.cfg.MaxFileSize && isIndexable(rel) {

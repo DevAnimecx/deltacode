@@ -93,7 +93,7 @@ func (m *model) status() string {
 	}
 	var toast string
 	if m.toast != nil {
-		toast = m.t.badge.Render("  "+m.toast.text+" ")
+		toast = m.t.badge.Render("  " + m.toast.text + " ")
 	}
 	l := m.t.stat.Render(fmt.Sprintf(" %s%s%s%s", p, m.statusText, inputInfo, lock))
 	r := m.t.dim.Render(fmt.Sprintf("msgs:%d  $%.4f  %dtok", len(m.entries), m.cost, m.tok))
@@ -174,7 +174,7 @@ func (m *model) render() {
 					out = append(out, "")
 					for _, line := range strings.Split(e.reasoning, "\n") {
 						if line != "" {
-							out = append(out, m.t.dim.Italic(true).Render("  " + line))
+							out = append(out, m.t.dim.Italic(true).Render("  "+line))
 						}
 					}
 					out = append(out, "")
@@ -332,7 +332,7 @@ func (m *model) streamRender(content string) string {
 		if lang != "" {
 			fn := extractFilename(lang, code)
 			if fn != "" {
-				out = append(out, m.t.badge.Render(" " + fn + " "))
+				out = append(out, m.t.badge.Render(" "+fn+" "))
 			}
 		}
 		for _, ln := range code {

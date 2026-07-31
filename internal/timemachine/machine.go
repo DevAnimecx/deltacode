@@ -11,14 +11,14 @@ import (
 )
 
 type Checkpoint struct {
-	ID        string    `json:"id"`
-	Timestamp time.Time `json:"timestamp"`
-	Label     string    `json:"label"`
+	ID        string     `json:"id"`
+	Timestamp time.Time  `json:"timestamp"`
+	Label     string     `json:"label"`
 	Files     []FileSnap `json:"files"`
-	Prompt    string    `json:"prompt"`
-	Response  string    `json:"response"`
-	Model     string    `json:"model"`
-	Provider  string    `json:"provider"`
+	Prompt    string     `json:"prompt"`
+	Response  string     `json:"response"`
+	Model     string     `json:"model"`
+	Provider  string     `json:"provider"`
 }
 
 type FileSnap struct {

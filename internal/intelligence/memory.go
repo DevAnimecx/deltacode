@@ -28,29 +28,29 @@ const (
 type Namespace = Layer
 
 const (
-	NSGlobal   Namespace = LayerGlobal
+	NSGlobal    Namespace = LayerGlobal
 	NSWorkspace Namespace = LayerWorkspace
-	NSProject  Namespace = LayerRepo
-	NSSession  Namespace = LayerSession
-	NSUser     Namespace = LayerFeature
+	NSProject   Namespace = LayerRepo
+	NSSession   Namespace = LayerSession
+	NSUser      Namespace = LayerFeature
 )
 
 type MemoryEntry struct {
-	ID          string    `json:"id"`
-	Namespace   Namespace `json:"namespace"`
-	Layer       Layer     `json:"layer"`
-	Key         string    `json:"key"`
-	Content     string    `json:"content"`
-	Tags        []string  `json:"tags"`
-	Priority    float64   `json:"priority"`
-	ExpiresAt   time.Time `json:"expires_at,omitempty"`
-	Confidence  float64   `json:"confidence"`
-	Source      string    `json:"source,omitempty"`
-	Verified    bool      `json:"verified"`
-	AccessCount int       `json:"access_count"`
-	LastAccess  time.Time `json:"last_access,omitempty"`
-	CreatedAt   time.Time `json:"created_at"`
-	UpdatedAt   time.Time `json:"updated_at"`
+	ID          string             `json:"id"`
+	Namespace   Namespace          `json:"namespace"`
+	Layer       Layer              `json:"layer"`
+	Key         string             `json:"key"`
+	Content     string             `json:"content"`
+	Tags        []string           `json:"tags"`
+	Priority    float64            `json:"priority"`
+	ExpiresAt   time.Time          `json:"expires_at,omitempty"`
+	Confidence  float64            `json:"confidence"`
+	Source      string             `json:"source,omitempty"`
+	Verified    bool               `json:"verified"`
+	AccessCount int                `json:"access_count"`
+	LastAccess  time.Time          `json:"last_access,omitempty"`
+	CreatedAt   time.Time          `json:"created_at"`
+	UpdatedAt   time.Time          `json:"updated_at"`
 	Tokens      map[string]float64 `json:"-"`
 }
 

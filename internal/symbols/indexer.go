@@ -14,20 +14,20 @@ import (
 type Language string
 
 const (
-	LangGo           Language = "go"
-	LangPython       Language = "python"
-	LangJavaScript   Language = "javascript"
-	LangTypeScript   Language = "typescript"
-	LangRust         Language = "rust"
-	LangJava         Language = "java"
-	LangCpp          Language = "cpp"
-	LangC            Language = "c"
-	LangCSharp       Language = "c_sharp"
-	LangRuby         Language = "ruby"
-	LangPHP          Language = "php"
-	LangSwift        Language = "swift"
-	LangKotlin       Language = "kotlin"
-	LangScala        Language = "scala"
+	LangGo         Language = "go"
+	LangPython     Language = "python"
+	LangJavaScript Language = "javascript"
+	LangTypeScript Language = "typescript"
+	LangRust       Language = "rust"
+	LangJava       Language = "java"
+	LangCpp        Language = "cpp"
+	LangC          Language = "c"
+	LangCSharp     Language = "c_sharp"
+	LangRuby       Language = "ruby"
+	LangPHP        Language = "php"
+	LangSwift      Language = "swift"
+	LangKotlin     Language = "kotlin"
+	LangScala      Language = "scala"
 )
 
 type SymbolKind int
@@ -119,13 +119,13 @@ type ImportEdge struct {
 }
 
 type SymbolGraph struct {
-	mu           sync.RWMutex
-	symbols      map[string]*Symbol
-	callEdges    []CallEdge
-	importEdges  []ImportEdge
-	fileIndex    map[string][]string
-	nameIndex    map[string][]string
-	projectRoot  string
+	mu          sync.RWMutex
+	symbols     map[string]*Symbol
+	callEdges   []CallEdge
+	importEdges []ImportEdge
+	fileIndex   map[string][]string
+	nameIndex   map[string][]string
+	projectRoot string
 }
 
 func NewSymbolGraph(root string) *SymbolGraph {
@@ -281,8 +281,8 @@ type Indexer struct {
 }
 
 type symbolPattern struct {
-	kind   SymbolKind
-	regex  *regexp.Regexp
+	kind    SymbolKind
+	regex   *regexp.Regexp
 	nameGrp int
 }
 
@@ -379,18 +379,18 @@ func (idx *Indexer) parseFile(lang Language, filePath string, content string) {
 			sig := strings.Join(strings.Fields(content[sigStart:sigEnd]), " ")
 
 			s := &Symbol{
-				ID:        id,
-				Name:      name,
-				Kind:      pat.kind,
-				Language:  lang,
-				FilePath:  filePath,
-				Line:      line,
-				Column:    col,
-				EndLine:   endLine,
-				Signature: sig,
+				ID:         id,
+				Name:       name,
+				Kind:       pat.kind,
+				Language:   lang,
+				FilePath:   filePath,
+				Line:       line,
+				Column:     col,
+				EndLine:    endLine,
+				Signature:  sig,
 				IsExported: isExportedName(lang, name),
-				CreatedAt: time.Now(),
-				UpdatedAt: time.Now(),
+				CreatedAt:  time.Now(),
+				UpdatedAt:  time.Now(),
 			}
 
 			// Attach preceding doc comment.
@@ -672,20 +672,20 @@ func buildSymbolRegexes() map[Language][]symbolPattern {
 func buildImportRegexes() map[Language][]importPattern {
 	re := func(s string) importPattern { return importPattern{regex: regexp.MustCompile(s)} }
 	return map[Language][]importPattern{
-		LangGo:           {re(`(?m)^\s*import\s+"([^"]+)"`), re(`(?m)^\s*(\w+)\s+"([^"]+)"`), re(`(?m)^\s*import\s*\(\s*\n([^)]*)\)`)},
-		LangPython:       {re(`(?m)^\s*import\s+([a-zA-Z0-9_.]+)`), re(`(?m)^\s*from\s+([a-zA-Z0-9_.]+)\s+import\s+`)},
-		LangJavaScript:   {re(`(?m)^\s*import\s+[^;]*?from\s+['"]([^'"]+)['"]`), re(`(?m)^\s*import\s+['"]([^'"]+)['"]`), re(`(?m)^\s*require\s*\(\s*['"]([^'"]+)['"]`)},
-		LangTypeScript:   {re(`(?m)^\s*import\s+[^;]*?from\s+['"]([^'"]+)['"]`), re(`(?m)^\s*import\s+['"]([^'"]+)['"]`), re(`(?m)^\s*require\s*\(\s*['"]([^'"]+)['"]`)},
-		LangRust:         {re(`(?m)^\s*use\s+([a-zA-Z0-9_:]+)`), re(`(?m)^\s*extern\s+crate\s+([a-zA-Z0-9_]+)`)},
-		LangJava:         {re(`(?m)^\s*import\s+(?:static\s+)?([a-zA-Z0-9_.]+);`)},
-		LangCpp:          {re(`(?m)^\s*#include\s*[<"]([^>"]+)[>"]`)},
-		LangC:            {re(`(?m)^\s*#include\s*[<"]([^>"]+)[>"]`)},
-		LangCSharp:       {re(`(?m)^\s*using\s+([a-zA-Z0-9_.]+);`)},
-		LangRuby:         {re(`(?m)^\s*require(?:_relative)?\s+['"]([^'"]+)['"]`)},
-		LangPHP:          {re(`(?m)^\s*use\s+([a-zA-Z0-9_\\]+)`), re(`(?m)^\s*require(?:_once)?\s*\(\s*['"]([^'"]+)['"]`)},
-		LangSwift:        {re(`(?m)^\s*import\s+([a-zA-Z0-9_.]+)`)},
-		LangKotlin:       {re(`(?m)^\s*import\s+([a-zA-Z0-9_.]+)`)},
-		LangScala:        {re(`(?m)^\s*import\s+([a-zA-Z0-9_.]+)`)},
+		LangGo:         {re(`(?m)^\s*import\s+"([^"]+)"`), re(`(?m)^\s*(\w+)\s+"([^"]+)"`), re(`(?m)^\s*import\s*\(\s*\n([^)]*)\)`)},
+		LangPython:     {re(`(?m)^\s*import\s+([a-zA-Z0-9_.]+)`), re(`(?m)^\s*from\s+([a-zA-Z0-9_.]+)\s+import\s+`)},
+		LangJavaScript: {re(`(?m)^\s*import\s+[^;]*?from\s+['"]([^'"]+)['"]`), re(`(?m)^\s*import\s+['"]([^'"]+)['"]`), re(`(?m)^\s*require\s*\(\s*['"]([^'"]+)['"]`)},
+		LangTypeScript: {re(`(?m)^\s*import\s+[^;]*?from\s+['"]([^'"]+)['"]`), re(`(?m)^\s*import\s+['"]([^'"]+)['"]`), re(`(?m)^\s*require\s*\(\s*['"]([^'"]+)['"]`)},
+		LangRust:       {re(`(?m)^\s*use\s+([a-zA-Z0-9_:]+)`), re(`(?m)^\s*extern\s+crate\s+([a-zA-Z0-9_]+)`)},
+		LangJava:       {re(`(?m)^\s*import\s+(?:static\s+)?([a-zA-Z0-9_.]+);`)},
+		LangCpp:        {re(`(?m)^\s*#include\s*[<"]([^>"]+)[>"]`)},
+		LangC:          {re(`(?m)^\s*#include\s*[<"]([^>"]+)[>"]`)},
+		LangCSharp:     {re(`(?m)^\s*using\s+([a-zA-Z0-9_.]+);`)},
+		LangRuby:       {re(`(?m)^\s*require(?:_relative)?\s+['"]([^'"]+)['"]`)},
+		LangPHP:        {re(`(?m)^\s*use\s+([a-zA-Z0-9_\\]+)`), re(`(?m)^\s*require(?:_once)?\s*\(\s*['"]([^'"]+)['"]`)},
+		LangSwift:      {re(`(?m)^\s*import\s+([a-zA-Z0-9_.]+)`)},
+		LangKotlin:     {re(`(?m)^\s*import\s+([a-zA-Z0-9_.]+)`)},
+		LangScala:      {re(`(?m)^\s*import\s+([a-zA-Z0-9_.]+)`)},
 	}
 }
 

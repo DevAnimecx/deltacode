@@ -11,12 +11,12 @@ import (
 type Aspect string
 
 const (
-	AspectTechnical   Aspect = "technical"
+	AspectTechnical    Aspect = "technical"
 	AspectArchitecture Aspect = "architecture"
-	AspectPerformance Aspect = "performance"
-	AspectSecurity    Aspect = "security"
-	AspectReadability Aspect = "readability"
-	AspectConsistency Aspect = "consistency"
+	AspectPerformance  Aspect = "performance"
+	AspectSecurity     Aspect = "security"
+	AspectReadability  Aspect = "readability"
+	AspectConsistency  Aspect = "consistency"
 )
 
 type Issue struct {
@@ -27,26 +27,26 @@ type Issue struct {
 }
 
 type Review struct {
-	Aspect    Aspect   `json:"aspect"`
-	Score     float64  `json:"score"`
-	Passed    bool     `json:"passed"`
-	Issues    []Issue  `json:"issues"`
-	Summary   string   `json:"summary"`
-	Duration  time.Duration `json:"duration_ms"`
+	Aspect   Aspect        `json:"aspect"`
+	Score    float64       `json:"score"`
+	Passed   bool          `json:"passed"`
+	Issues   []Issue       `json:"issues"`
+	Summary  string        `json:"summary"`
+	Duration time.Duration `json:"duration_ms"`
 }
 
 type Result struct {
-	Reviews     []Review       `json:"reviews"`
-	OverallScore float64       `json:"overall_score"`
-	Passed      bool           `json:"passed"`
+	Reviews      []Review `json:"reviews"`
+	OverallScore float64  `json:"overall_score"`
+	Passed       bool     `json:"passed"`
 }
 
 type Engine struct {
 	provider interface {
 		Chat(req models.ChatRequest) (*models.ChatResponse, error)
 	}
-	model string
-	aspects []Aspect
+	model     string
+	aspects   []Aspect
 	threshold float64
 }
 

@@ -13,6 +13,7 @@ import (
 
 	"github.com/DevAnimecx/deltacode/internal/agents"
 	"github.com/DevAnimecx/deltacode/internal/checkpoint"
+	"github.com/DevAnimecx/deltacode/internal/config"
 	ctxeng "github.com/DevAnimecx/deltacode/internal/context"
 	"github.com/DevAnimecx/deltacode/internal/continuation"
 	"github.com/DevAnimecx/deltacode/internal/critique"
@@ -29,7 +30,6 @@ import (
 	"github.com/DevAnimecx/deltacode/internal/tools"
 	"github.com/DevAnimecx/deltacode/internal/validation"
 	"github.com/DevAnimecx/deltacode/pkg/models"
-	"github.com/DevAnimecx/deltacode/internal/config"
 )
 
 // Task mirrors planning.Task for JSON persistence.
@@ -51,19 +51,19 @@ const (
 
 // EngineState exposes live session state for the TUI.
 type EngineState struct {
-	mu            sync.RWMutex
-	Phase         Phase     `json:"phase"`
-	Agent         string    `json:"agent"`
-	TaskID        string    `json:"task_id"`
-	TaskCount     int       `json:"task_count"`
-	TaskDone      int       `json:"task_done"`
-	Attempts      int       `json:"attempts"`
-	Provider      string    `json:"provider"`
-	Model         string    `json:"model"`
-	TokensUsed    int       `json:"tokens_used"`
-	Cost          float64   `json:"cost"`
+	mu             sync.RWMutex
+	Phase          Phase    `json:"phase"`
+	Agent          string   `json:"agent"`
+	TaskID         string   `json:"task_id"`
+	TaskCount      int      `json:"task_count"`
+	TaskDone       int      `json:"task_done"`
+	Attempts       int      `json:"attempts"`
+	Provider       string   `json:"provider"`
+	Model          string   `json:"model"`
+	TokensUsed     int      `json:"tokens_used"`
+	Cost           float64  `json:"cost"`
 	LastValidation string   `json:"last_validation"`
-	Timeline      []string  `json:"timeline"`
+	Timeline       []string `json:"timeline"`
 }
 
 func (s *EngineState) Snapshot() EngineState {
@@ -113,11 +113,11 @@ type Engine struct {
 	state      EngineState
 
 	// v0.2.6
-	orche    *orchestrator.Router
-	watch    *repointel.Watcher
-	workers  int
-	goal     continuation.GoalStatus
-	eventsF  *os.File
+	orche   *orchestrator.Router
+	watch   *repointel.Watcher
+	workers int
+	goal    continuation.GoalStatus
+	eventsF *os.File
 }
 
 // SetConcurrency configures the worker pool size (default 3).
@@ -625,31 +625,15 @@ func (e *Engine) executeTask(p provider.Provider, goal string, t planning.Task, 
 
 	// Persist files written by the agent.
 	if result != nil && len(result.Files) > 0 {
-		for _, f := range result.Files {
-			code := agents.ExtractCodeBlock(result.Output)
-			if code == "" {
-				continue
-			}
-			full := filepath.Join(e.workDir, f)
-			os.MkdirAll(filepath.Dir(full), 0755)
-			if werr := os.WriteFile(full, []byte(code), 0644); werr != nil {
-				return "", werr
-			}
-			e.autoFormat(full)
+		if !strings.Contains(result.Output, "```") {
+			return "", fmt.Errorf("agent %s returned no fenced code block for %v", agentName, result.Files)
 		}
-	}
-
-	// If the agent named a file but produced no output, apply the whole output.
-	if result != nil && len(result.Files) > 0 {
 		for _, f := range result.Files {
-			full := filepath.Join(e.workDir, f)
-			if data, rerr := os.ReadFile(full); rerr == nil && len(strings.TrimSpace(string(data))) > 0 {
-				continue
-			}
 			code := agents.ExtractCodeBlock(result.Output)
 			if code == "" {
 				continue
 			}
+			full := filepath.Join(e.workDir, f)
 			os.MkdirAll(filepath.Dir(full), 0755)
 			if werr := os.WriteFile(full, []byte(code), 0644); werr != nil {
 				return "", werr
@@ -684,6 +668,8 @@ func (e *Engine) executeTask(p provider.Provider, goal string, t planning.Task, 
 
 // qualityGate runs the validation loop on a completed task and feeds
 // failures back to the Debugger agent (max 2 improvement iterations).
+// It returns the failures remaining after the loop (or the original
+// failures if no Debugger is available).
 func (e *Engine) qualityGate(p provider.Provider, goal string, t planning.Task, plan *planning.Plan) []validation.Result {
 	pipeline := validation.New(e.workDir)
 	var files []validation.File
@@ -725,16 +711,25 @@ func (e *Engine) qualityGate(p provider.Provider, goal string, t planning.Task, 
 		if err != nil {
 			break
 		}
+		if !strings.Contains(res.Output, "```") {
+			e.state.log(fmt.Sprintf("quality loop iteration %d: debugger returned no code block", iter+1))
+			break
+		}
 		if code := agents.ExtractCodeBlock(res.Output); code != "" {
+			// Write the corrected file. A task normally maps to one file;
+			// when multiple are listed, apply to the first that exists.
 			for _, f := range t.Files {
 				full := filepath.Join(e.workDir, f)
 				if _, rerr := os.Stat(full); rerr == nil {
-					os.WriteFile(full, []byte(code), 0644)
-					e.autoFormat(full)
+					if werr := os.WriteFile(full, []byte(code), 0644); werr == nil {
+						e.autoFormat(full)
+					}
+					break
 				}
 			}
 		}
 		e.state.log(fmt.Sprintf("quality loop iteration %d: %d failures", iter+1, len(failed)))
+		fmt.Printf("    ↻ quality loop %d: %d failure(s) -> debugger fix\n", iter+1, len(failed))
 		e.emitEvent("quality_fix", t.ID, map[string]any{"iteration": iter + 1})
 		failed = failed[:0]
 		for _, r := range pipeline.ValidateFiles(files) {
@@ -742,8 +737,14 @@ func (e *Engine) qualityGate(p provider.Provider, goal string, t planning.Task, 
 				failed = append(failed, r)
 			}
 		}
+		// Re-check the whole repo: build breaks must be re-verified too.
+		for _, r := range pipeline.RunGoChecks() {
+			if !r.Passed {
+				failed = append(failed, r)
+			}
+		}
 	}
-	return results
+	return failed
 }
 
 func hasReady(plan *planning.Plan) bool {

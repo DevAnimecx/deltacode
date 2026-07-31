@@ -128,7 +128,7 @@ if __name__ == "__main__":
     assert True
 `,
 			"requirements.txt": "",
-			".gitignore": "__pycache__/\n.venv/\n",
+			".gitignore":       "__pycache__/\n.venv/\n",
 		},
 	},
 	{
@@ -243,10 +243,10 @@ func scaffoldTool(args ...string) (string, error) {
 // ---------- Workflow Tool ----------
 
 type Workflow struct {
-	ID      string       `json:"id"`
-	Name    string       `json:"name"`
+	ID      string         `json:"id"`
+	Name    string         `json:"name"`
 	Steps   []WorkflowStep `json:"steps"`
-	Created time.Time    `json:"created_at"`
+	Created time.Time      `json:"created_at"`
 }
 
 type WorkflowStep struct {

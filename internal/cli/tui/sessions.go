@@ -9,8 +9,8 @@ import (
 	"strings"
 	"time"
 
-	tea "github.com/charmbracelet/bubbletea"
 	"github.com/DevAnimecx/deltacode/pkg/models"
+	tea "github.com/charmbracelet/bubbletea"
 )
 
 func sessionsDir() string {

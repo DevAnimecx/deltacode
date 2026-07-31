@@ -25,12 +25,12 @@ type Session struct {
 }
 
 type MemoryEntry struct {
-	ID        int64           `json:"id"`
-	SessionID int64           `json:"session_id"`
-	Role      string          `json:"role"`
-	Content   string          `json:"content"`
-	Metadata  string          `json:"metadata"`
-	CreatedAt time.Time       `json:"created_at"`
+	ID        int64     `json:"id"`
+	SessionID int64     `json:"session_id"`
+	Role      string    `json:"role"`
+	Content   string    `json:"content"`
+	Metadata  string    `json:"metadata"`
+	CreatedAt time.Time `json:"created_at"`
 }
 
 func NewProjectMemory() (*ProjectMemory, error) {

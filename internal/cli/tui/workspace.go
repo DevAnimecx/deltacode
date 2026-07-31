@@ -201,7 +201,7 @@ func (m *model) fileTree() string {
 			lines = append(lines, "  …")
 			break
 		}
-		lines = append(lines, lipgloss.NewStyle().Foreground(lipgloss.Color("214")).Render(" M ") + " " + f)
+		lines = append(lines, lipgloss.NewStyle().Foreground(lipgloss.Color("214")).Render(" M ")+" "+f)
 		shown++
 	}
 	for _, f := range ws.newFiles {
@@ -209,7 +209,7 @@ func (m *model) fileTree() string {
 			lines = append(lines, "  …")
 			break
 		}
-		lines = append(lines, lipgloss.NewStyle().Foreground(lipgloss.Color("43")).Render(" A ") + " " + f)
+		lines = append(lines, lipgloss.NewStyle().Foreground(lipgloss.Color("43")).Render(" A ")+" "+f)
 		shown++
 	}
 	if shown == 0 {

@@ -8,13 +8,13 @@ import (
 
 // RankWeights controls how the ranking engine balances factors.
 type RankWeights struct {
-	Capability   float64
-	Reliability  float64
-	Performance  float64
-	Security     float64
-	Preference   float64
-	History      float64
-	Cost         float64
+	Capability  float64
+	Reliability float64
+	Performance float64
+	Security    float64
+	Preference  float64
+	History     float64
+	Cost        float64
 }
 
 func DefaultWeights() RankWeights {

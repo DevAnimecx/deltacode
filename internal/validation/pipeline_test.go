@@ -8,13 +8,13 @@ import (
 
 func TestDetectFile(t *testing.T) {
 	cases := map[string]string{
-		"a.go":       "go",
-		"b.py":       "python",
-		"c.ts":       "typescript",
-		"d.cpp":      "cpp",
-		"e.rs":       "rust",
-		"f.txt":      "",
-		"g.json":     "json",
+		"a.go":   "go",
+		"b.py":   "python",
+		"c.ts":   "typescript",
+		"d.cpp":  "cpp",
+		"e.rs":   "rust",
+		"f.txt":  "",
+		"g.json": "json",
 	}
 	for path, want := range cases {
 		if got := DetectFile(path); got != want {

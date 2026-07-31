@@ -13,12 +13,12 @@ import (
 type Phase string
 
 const (
-	PhaseUnderstand    Phase = "understand"
-	PhaseWorldModel    Phase = "world-model"
-	PhaseDecompose     Phase = "decompose"
-	PhaseDynamicPlan   Phase = "dynamic-plan"
-	PhaseExecute       Phase = "execute"
-	PhaseReflect       Phase = "reflect"
+	PhaseUnderstand  Phase = "understand"
+	PhaseWorldModel  Phase = "world-model"
+	PhaseDecompose   Phase = "decompose"
+	PhaseDynamicPlan Phase = "dynamic-plan"
+	PhaseExecute     Phase = "execute"
+	PhaseReflect     Phase = "reflect"
 )
 
 type Task struct {
@@ -69,13 +69,13 @@ type Agent interface {
 }
 
 type baseAgent struct {
-	name        string
-	phase       Phase
-	description string
+	name         string
+	phase        Phase
+	description  string
 	systemPrompt string
-	temperature float64
-	maxTokens   int
-	runFn       func(ctx *Context, task Task, base *baseAgent) (*Result, error)
+	temperature  float64
+	maxTokens    int
+	runFn        func(ctx *Context, task Task, base *baseAgent) (*Result, error)
 }
 
 func (b *baseAgent) Name() string        { return b.name }

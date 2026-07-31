@@ -12,37 +12,37 @@ import (
 type TaskType string
 
 const (
-	TaskFrontend  TaskType = "frontend"
-	TaskBackend   TaskType = "backend"
-	TaskDatabase  TaskType = "database"
-	TaskAPI       TaskType = "api"
-	TaskTest      TaskType = "test"
-	TaskBugFix    TaskType = "bugfix"
-	TaskReview    TaskType = "review"
-	TaskOptimize  TaskType = "optimize"
-	TaskDocs      TaskType = "docs"
-	TaskConfig    TaskType = "config"
-	TaskDocker    TaskType = "docker"
-	TaskCI        TaskType = "ci"
-	TaskSecurity  TaskType = "security"
-	TaskUI        TaskType = "ui"
+	TaskFrontend TaskType = "frontend"
+	TaskBackend  TaskType = "backend"
+	TaskDatabase TaskType = "database"
+	TaskAPI      TaskType = "api"
+	TaskTest     TaskType = "test"
+	TaskBugFix   TaskType = "bugfix"
+	TaskReview   TaskType = "review"
+	TaskOptimize TaskType = "optimize"
+	TaskDocs     TaskType = "docs"
+	TaskConfig   TaskType = "config"
+	TaskDocker   TaskType = "docker"
+	TaskCI       TaskType = "ci"
+	TaskSecurity TaskType = "security"
+	TaskUI       TaskType = "ui"
 )
 
 type GraphNode struct {
-	ID          string    `json:"id"`
-	TaskType    TaskType  `json:"task_type"`
-	Description string    `json:"description"`
-	Prompt      string    `json:"prompt"`
-	Provider    string    `json:"provider"`
-	Model       string    `json:"model"`
-	Deps        []string  `json:"deps"`
-	Output      string    `json:"output"`
-	Status      string    `json:"status"`
+	ID          string   `json:"id"`
+	TaskType    TaskType `json:"task_type"`
+	Description string   `json:"description"`
+	Prompt      string   `json:"prompt"`
+	Provider    string   `json:"provider"`
+	Model       string   `json:"model"`
+	Deps        []string `json:"deps"`
+	Output      string   `json:"output"`
+	Status      string   `json:"status"`
 }
 
 type TaskGraph struct {
-	Nodes    []*GraphNode            `json:"nodes"`
-	Edges    map[string][]string     `json:"edges"`
+	Nodes []*GraphNode        `json:"nodes"`
+	Edges map[string][]string `json:"edges"`
 }
 
 type FusionEngine struct {

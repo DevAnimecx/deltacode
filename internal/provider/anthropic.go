@@ -41,12 +41,12 @@ type anthropicMessage struct {
 }
 
 type anthropicRequest struct {
-	Model       string              `json:"model"`
-	Messages    []anthropicMessage  `json:"messages"`
-	System      string              `json:"system,omitempty"`
-	MaxTokens   int                 `json:"max_tokens,omitempty"`
-	Temperature float64             `json:"temperature,omitempty"`
-	Stream      bool                `json:"stream,omitempty"`
+	Model       string             `json:"model"`
+	Messages    []anthropicMessage `json:"messages"`
+	System      string             `json:"system,omitempty"`
+	MaxTokens   int                `json:"max_tokens,omitempty"`
+	Temperature float64            `json:"temperature,omitempty"`
+	Stream      bool               `json:"stream,omitempty"`
 }
 
 type anthropicContent struct {
@@ -55,11 +55,11 @@ type anthropicContent struct {
 }
 
 type anthropicResponse struct {
-	ID        string              `json:"id"`
-	Model     string              `json:"model"`
-	Content   []anthropicContent  `json:"content"`
+	ID         string             `json:"id"`
+	Model      string             `json:"model"`
+	Content    []anthropicContent `json:"content"`
 	StopReason string             `json:"stop_reason"`
-	Usage     *struct {
+	Usage      *struct {
 		InputTokens  int `json:"input_tokens"`
 		OutputTokens int `json:"output_tokens"`
 	} `json:"usage,omitempty"`

@@ -9,20 +9,20 @@ import (
 type TaskType string
 
 const (
-	TaskGeneral     TaskType = "general"
-	TaskCode        TaskType = "code"
-	TaskArchitect   TaskType = "architecture"
-	TaskDebug       TaskType = "debug"
-	TaskRefactor    TaskType = "refactor"
-	TaskTest        TaskType = "test"
-	TaskExplain     TaskType = "explain"
-	TaskReview      TaskType = "review"
-	TaskPlan        TaskType = "plan"
-	TaskUI          TaskType = "ui"
-	TaskBackend     TaskType = "backend"
-	TaskDocs        TaskType = "docs"
-	TaskOptimize    TaskType = "optimize"
-	TaskSecurity    TaskType = "security"
+	TaskGeneral   TaskType = "general"
+	TaskCode      TaskType = "code"
+	TaskArchitect TaskType = "architecture"
+	TaskDebug     TaskType = "debug"
+	TaskRefactor  TaskType = "refactor"
+	TaskTest      TaskType = "test"
+	TaskExplain   TaskType = "explain"
+	TaskReview    TaskType = "review"
+	TaskPlan      TaskType = "plan"
+	TaskUI        TaskType = "ui"
+	TaskBackend   TaskType = "backend"
+	TaskDocs      TaskType = "docs"
+	TaskOptimize  TaskType = "optimize"
+	TaskSecurity  TaskType = "security"
 )
 
 type Router struct {

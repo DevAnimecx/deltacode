@@ -15,14 +15,14 @@ import (
 
 // Job is a background execution result.
 type Job struct {
-	ID        string
-	Name      string
-	Started   time.Time
-	Finished  time.Time
-	ExitCode  int
-	Output    string
-	Running   bool
-	Done      bool
+	ID       string
+	Name     string
+	Started  time.Time
+	Finished time.Time
+	ExitCode int
+	Output   string
+	Running  bool
+	Done     bool
 }
 
 type jobStore struct {

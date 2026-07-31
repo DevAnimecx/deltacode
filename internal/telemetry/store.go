@@ -10,16 +10,16 @@ import (
 )
 
 type ProviderMetric struct {
-	Provider     string    `json:"provider"`
-	Model        string    `json:"model"`
-	Calls        int       `json:"calls"`
-	Successes    int       `json:"successes"`
-	Failures     int       `json:"failures"`
-	TotalLatencyMs float64 `json:"total_latency_ms"`
-	TotalTokens   int       `json:"total_tokens"`
-	TotalCost     float64  `json:"total_cost"`
-	Retries      int       `json:"retries"`
-	LastUsed     time.Time `json:"last_used"`
+	Provider       string    `json:"provider"`
+	Model          string    `json:"model"`
+	Calls          int       `json:"calls"`
+	Successes      int       `json:"successes"`
+	Failures       int       `json:"failures"`
+	TotalLatencyMs float64   `json:"total_latency_ms"`
+	TotalTokens    int       `json:"total_tokens"`
+	TotalCost      float64   `json:"total_cost"`
+	Retries        int       `json:"retries"`
+	LastUsed       time.Time `json:"last_used"`
 }
 
 func (m *ProviderMetric) Score() float64 {
@@ -59,19 +59,19 @@ func (m *ProviderMetric) Score() float64 {
 }
 
 type Event struct {
-	Time       time.Time      `json:"time"`
-	Provider   string         `json:"provider,omitempty"`
-	Model      string         `json:"model,omitempty"`
-	Agent      string         `json:"agent,omitempty"`
-	Phase      string         `json:"phase,omitempty"`
-	TaskID     string         `json:"task_id,omitempty"`
-	Type       string         `json:"type"`
-	LatencyMs  float64        `json:"latency_ms,omitempty"`
-	Tokens     int            `json:"tokens,omitempty"`
-	Cost       float64        `json:"cost,omitempty"`
-	OK         bool           `json:"ok"`
-	Detail     string         `json:"detail,omitempty"`
-	Data       map[string]any `json:"data,omitempty"`
+	Time      time.Time      `json:"time"`
+	Provider  string         `json:"provider,omitempty"`
+	Model     string         `json:"model,omitempty"`
+	Agent     string         `json:"agent,omitempty"`
+	Phase     string         `json:"phase,omitempty"`
+	TaskID    string         `json:"task_id,omitempty"`
+	Type      string         `json:"type"`
+	LatencyMs float64        `json:"latency_ms,omitempty"`
+	Tokens    int            `json:"tokens,omitempty"`
+	Cost      float64        `json:"cost,omitempty"`
+	OK        bool           `json:"ok"`
+	Detail    string         `json:"detail,omitempty"`
+	Data      map[string]any `json:"data,omitempty"`
 }
 
 type Store struct {

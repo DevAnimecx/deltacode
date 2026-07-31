@@ -29,11 +29,11 @@ const (
 type RoutingMode string
 
 const (
-	RouteLatency   RoutingMode = "latency"
-	RouteCost      RoutingMode = "cost"
+	RouteLatency    RoutingMode = "latency"
+	RouteCost       RoutingMode = "cost"
 	RouteConfidence RoutingMode = "confidence"
-	RouteBalanced  RoutingMode = "balanced"
-	RouteDefault   RoutingMode = "default" // user's default provider
+	RouteBalanced   RoutingMode = "balanced"
+	RouteDefault    RoutingMode = "default" // user's default provider
 )
 
 // Endpoint is a provider+model pair that can serve a call.
@@ -45,9 +45,9 @@ type Endpoint struct {
 
 // Router decides which endpoint serves a phase.
 type Router struct {
-	mu      sync.RWMutex
-	configs map[string]models.ProviderConfig // by provider name
-	defaults map[string]string               // phase -> "provider:model"
+	mu       sync.RWMutex
+	configs  map[string]models.ProviderConfig // by provider name
+	defaults map[string]string                // phase -> "provider:model"
 	mode     RoutingMode
 	tele     *telemetry.Store
 }

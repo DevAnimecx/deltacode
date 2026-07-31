@@ -26,6 +26,15 @@ func (p *OpenAICompatible) Name() string {
 	return p.cfg.Name
 }
 
+// timeout returns the per-request timeout: provider config override, or a
+// default generous enough for reasoning-heavy multi-turn agent calls.
+func (p *OpenAICompatible) timeout() time.Duration {
+	if p.cfg.TimeoutSec > 0 {
+		return time.Duration(p.cfg.TimeoutSec) * time.Second
+	}
+	return 300 * time.Second
+}
+
 func (p *OpenAICompatible) Type() models.ProviderType {
 	return p.cfg.Type
 }
@@ -130,7 +139,7 @@ func (p *OpenAICompatible) Chat(req models.ChatRequest) (*models.ChatResponse, e
 		httpReq.Header.Set("Authorization", "Bearer "+p.cfg.APIKey)
 	}
 
-	ctx, cancel := context.WithTimeout(context.Background(), 120*time.Second)
+	ctx, cancel := context.WithTimeout(context.Background(), p.timeout())
 	defer cancel()
 	httpReq = httpReq.WithContext(ctx)
 
@@ -271,7 +280,7 @@ func (p *OpenAICompatible) ChatStream(req models.ChatRequest) (<-chan models.Str
 		httpReq.Header.Set("Authorization", "Bearer "+p.cfg.APIKey)
 	}
 
-	ctx, cancel := context.WithTimeout(context.Background(), 180*time.Second)
+	ctx, cancel := context.WithTimeout(context.Background(), p.timeout())
 	httpReq = httpReq.WithContext(ctx)
 
 	ch := make(chan models.StreamChunk, 64)
@@ -312,9 +321,6 @@ func (p *OpenAICompatible) ChatStream(req models.ChatRequest) (<-chan models.Str
 			for _, choice := range chunk.Choices {
 				content := choice.Delta.Content
 				reasoning := choice.Delta.ReasoningContent
-				if content == "" && reasoning != "" {
-					content = reasoning
-				}
 				sc := models.StreamChunk{
 					Model:     chunk.Model,
 					Reasoning: reasoning,

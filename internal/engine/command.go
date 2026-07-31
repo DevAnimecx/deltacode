@@ -131,14 +131,14 @@ func (e *Engine) RunPrompt(prompt string, stream bool) error {
 			if chunk.Error != nil {
 				return chunk.Error
 			}
+			if chunk.Content != "" {
+				hadContent = true
+				sb.WriteString(chunk.Content)
+				fmt.Print(chunk.Content)
+			}
 			if chunk.Done {
 				break
 			}
-			if chunk.Content != "" {
-				hadContent = true
-			}
-			sb.WriteString(chunk.Content)
-			fmt.Print(chunk.Content)
 		}
 		fullResponse = sb.String()
 		if !hadContent && fullResponse == "" {

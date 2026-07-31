@@ -116,12 +116,12 @@ func TestRemoveSymbolsByFile(t *testing.T) {
 
 func TestDetectLanguage(t *testing.T) {
 	cases := map[string]Language{
-		"a.go":     LangGo,
-		"b.py":     LangPython,
-		"c.ts":     LangTypeScript,
-		"d.rs":     LangRust,
-		"e.java":   LangJava,
-		"f.txt":    "",
+		"a.go":   LangGo,
+		"b.py":   LangPython,
+		"c.ts":   LangTypeScript,
+		"d.rs":   LangRust,
+		"e.java": LangJava,
+		"f.txt":  "",
 	}
 	for path, want := range cases {
 		if got := detectLanguage(path); got != want {

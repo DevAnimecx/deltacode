@@ -8,8 +8,8 @@ import (
 )
 
 const (
-	maxHistory    = 200
-	timeRFC3339   = time.RFC3339
+	maxHistory  = 200
+	timeRFC3339 = time.RFC3339
 )
 
 func historyPath() string {
@@ -57,13 +57,13 @@ func (m *model) loadHistory() {
 // exportJSON writes the session transcript as JSON.
 func (m *model) exportJSON(path string) error {
 	type msg struct {
-		Role      string `json:"role"`
-		Content   string `json:"content"`
-		Reasoning string `json:"reasoning,omitempty"`
-		Model     string `json:"model,omitempty"`
-		Tokens    int    `json:"tokens,omitempty"`
+		Role      string  `json:"role"`
+		Content   string  `json:"content"`
+		Reasoning string  `json:"reasoning,omitempty"`
+		Model     string  `json:"model,omitempty"`
+		Tokens    int     `json:"tokens,omitempty"`
 		Cost      float64 `json:"cost,omitempty"`
-		Time      string `json:"time,omitempty"`
+		Time      string  `json:"time,omitempty"`
 	}
 	var out []msg
 	for _, e := range m.entries {

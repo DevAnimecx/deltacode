@@ -156,11 +156,11 @@ func addProviderInteractive(cfg *config.Manager) {
 	}
 
 	p := models.ProviderConfig{
-		Name:   name,
-		Type:   providerType,
+		Name:    name,
+		Type:    providerType,
 		BaseURL: baseURL,
-		APIKey: key,
-		Models: modelsList,
+		APIKey:  key,
+		Models:  modelsList,
 	}
 
 	if err := cfg.AddProvider(p); err != nil {

@@ -15,21 +15,21 @@ import (
 type CheckType string
 
 const (
-	CheckParse      CheckType = "parse"
-	CheckFormat     CheckType = "format"
-	CheckTypecheck  CheckType = "typecheck"
-	CheckLint       CheckType = "lint"
-	CheckTest       CheckType = "test"
-	CheckBuild      CheckType = "build"
-	CheckSecurity   CheckType = "security"
-	CheckDiff       CheckType = "diff"
+	CheckParse     CheckType = "parse"
+	CheckFormat    CheckType = "format"
+	CheckTypecheck CheckType = "typecheck"
+	CheckLint      CheckType = "lint"
+	CheckTest      CheckType = "test"
+	CheckBuild     CheckType = "build"
+	CheckSecurity  CheckType = "security"
+	CheckDiff      CheckType = "diff"
 )
 
 type Result struct {
-	Check    CheckType `json:"check"`
-	File     string    `json:"file,omitempty"`
-	Passed   bool      `json:"passed"`
-	Message  string    `json:"message,omitempty"`
+	Check    CheckType     `json:"check"`
+	File     string        `json:"file,omitempty"`
+	Passed   bool          `json:"passed"`
+	Message  string        `json:"message,omitempty"`
 	Duration time.Duration `json:"duration_ms"`
 }
 
