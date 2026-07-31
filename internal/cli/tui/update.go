@@ -641,7 +641,7 @@ func (m *model) submit(prompt string) tea.Cmd {
 
 	ctxPrompt := prompt
 	if m.ctxEng != nil {
-		ctxPrompt = m.ctxEng.BuildPrompt(prompt)
+		ctxPrompt = m.ctxEng.CachedPrompt(prompt)
 	}
 
 	msgs := []models.Message{

@@ -86,6 +86,20 @@ func (e *Engine) Refresh() *Context {
 	return ctx
 }
 
+// CachedPrompt wraps the prompt in the currently cached context without ever
+// collecting. If no context has been collected yet, the prompt is returned
+// unchanged. This is the UI-thread-safe variant: it never blocks on disk
+// walks or git subprocesses.
+func (e *Engine) CachedPrompt(userPrompt string) string {
+	e.mu.Lock()
+	ctx := e.cached
+	e.mu.Unlock()
+	if ctx == nil {
+		return userPrompt
+	}
+	return e.renderPrompt(ctx, userPrompt)
+}
+
 // BuildPrompt returns a prompt wrapped in the freshest cached project
 // context. If the cache is older than cacheTTL (or absent) it collects
 // synchronously so headless callers never see stale context.

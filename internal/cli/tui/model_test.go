@@ -413,6 +413,31 @@ func TestSlashCompletionOpensDropdown(t *testing.T) {
 	}
 }
 
+// TestLiveGatewaySend exercises the real send->stream->response path against
+// the user's configured provider (set DELTA_LIVE=1). It is skipped unless the
+// live flag is set so CI never depends on a running gateway.
+func TestLiveGatewaySend(t *testing.T) {
+	if os.Getenv("DELTA_LIVE") != "1" {
+		t.Skip("set DELTA_LIVE=1 to run the live gateway test")
+	}
+	cfg, err := config.NewManager()
+	if err != nil {
+		t.Fatalf("config.NewManager: %v", err)
+	}
+	m := testModel(t, cfg)
+	got := pump(t, m, "Reply with exactly: LIVE-OK")
+	if !strings.Contains(got, "LIVE-OK") {
+		t.Fatalf("live response = %q, want it to contain %q", got, "LIVE-OK")
+	}
+	if m.streaming {
+		t.Fatal("still streaming after live done")
+	}
+	last := lastEntry(m, "assistant")
+	if last == nil || last.content != got {
+		t.Fatalf("assistant entry mismatch: %+v", last)
+	}
+}
+
 func TestStreamWorkerFallbackToNonStreaming(t *testing.T) {
 	// A stream that produces no content must fall back to a plain Chat call.
 	reqs := 0
