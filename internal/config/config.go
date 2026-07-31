@@ -38,12 +38,9 @@ type Manager struct {
 	config     models.Config
 }
 
-func NewManager() (*Manager, error) {
-	home, err := os.UserHomeDir()
-	if err != nil {
-		return nil, fmt.Errorf("cannot find home dir: %w", err)
-	}
-	dir := filepath.Join(home, configDir)
+// NewManagerAt creates a config manager rooted at dir (used by tests and
+// callers that want a config outside the user home directory).
+func NewManagerAt(dir string) (*Manager, error) {
 	if err := os.MkdirAll(dir, 0700); err != nil {
 		return nil, fmt.Errorf("cannot create config dir: %w", err)
 	}
@@ -61,6 +58,14 @@ func NewManager() (*Manager, error) {
 		m.Save()
 	}
 	return m, nil
+}
+
+func NewManager() (*Manager, error) {
+	home, err := os.UserHomeDir()
+	if err != nil {
+		return nil, fmt.Errorf("cannot find home dir: %w", err)
+	}
+	return NewManagerAt(filepath.Join(home, configDir))
 }
 
 func (m *Manager) load() error {

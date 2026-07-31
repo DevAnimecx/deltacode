@@ -40,7 +40,7 @@ func (m *model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 	case spinner.TickMsg:
 		m.sp, _ = m.sp.Update(msg)
-		return m, nil
+		return m, m.sp.Tick
 
 	case chunk:
 		return m, m.onChunk(v)
@@ -51,7 +51,7 @@ func (m *model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			m.toast = nil
 		}
 		m.render()
-		if m.streaming {
+		if m.streaming || m.toast != nil {
 			return m, m.tick()
 		}
 		return m, nil
@@ -113,17 +113,6 @@ func (m *model) onKey(msg tea.KeyMsg) tea.Cmd {
 		m.saveSession()
 		m.toastNow("Session saved")
 		return nil
-	case "ctrl+w":
-		if m.wsData == nil {
-			m.wsData = &workspace{project: m.projectName(), badge: "Ready"}
-			m.wsData.gitRefresh()
-		}
-		m.wsData.shown = !m.wsData.shown
-		m.wsData.gitRefresh()
-		if m.wsData.shown {
-			m.notify("workspace view opened")
-		}
-		return nil
 	case "ctrl+h":
 		m.helpShown = !m.helpShown
 		return nil
@@ -169,6 +158,7 @@ func (m *model) onInputKey(msg tea.KeyMsg) tea.Cmd {
 				m.historyIdx--
 			}
 			m.ta.SetValue(m.inputHistory[m.historyIdx])
+			m.maybeSlashComplete()
 			return nil
 		}
 		if !m.ta.Focused() {
@@ -182,9 +172,11 @@ func (m *model) onInputKey(msg tea.KeyMsg) tea.Cmd {
 			if m.historyIdx >= len(m.inputHistory) {
 				m.historyIdx = -1
 				m.ta.Reset()
+				m.maybeSlashComplete()
 				return nil
 			}
 			m.ta.SetValue(m.inputHistory[m.historyIdx])
+			m.maybeSlashComplete()
 			return nil
 		}
 		if !m.ta.Focused() {
@@ -266,6 +258,20 @@ func (m *model) onInputKey(msg tea.KeyMsg) tea.Cmd {
 			return nil
 		}
 
+	case "ctrl+w":
+		if !m.ta.Focused() {
+			if m.wsData == nil {
+				m.wsData = &workspace{project: m.projectName(), badge: "Ready"}
+				m.wsData.gitRefresh()
+			}
+			m.wsData.shown = !m.wsData.shown
+			m.wsData.gitRefresh()
+			if m.wsData.shown {
+				m.notify("workspace view opened")
+			}
+			return nil
+		}
+
 	case "ctrl+d":
 		if !m.ta.Focused() {
 			m.vp.HalfViewDown()
@@ -325,6 +331,7 @@ func (m *model) onInputKey(msg tea.KeyMsg) tea.Cmd {
 		m.ta.Focus()
 	}
 	m.ta, _ = m.ta.Update(msg)
+	m.maybeSlashComplete()
 	return nil
 }
 
@@ -341,25 +348,7 @@ func (m *model) maybeSlashComplete() {
 }
 
 func (m *model) refreshSlashDropdown(query string) {
-	all := []ddItem{
-		{label: "/clear", desc: "Clear conversation", value: "/clear"},
-		{label: "/copy", desc: "Copy entire transcript", value: "/copy"},
-		{label: "/cost", desc: "Show session cost & tokens", value: "/cost"},
-		{label: "/export", desc: "Save transcript to file", value: "/export"},
-		{label: "/help", desc: "Show help", value: "/help"},
-		{label: "/minimal", desc: "Toggle minimal mode", value: "/minimal"},
-		{label: "/model", desc: "Switch model", value: "/model"},
-		{label: "/new", desc: "Start a new session", value: "/new"},
-		{label: "/provider", desc: "Switch provider", value: "/provider"},
-		{label: "/search", desc: "Search conversation", value: "/search"},
-		{label: "/sessions", desc: "List & resume sessions", value: "/sessions"},
-		{label: "/stats", desc: "Session statistics", value: "/stats"},
-		{label: "/theme", desc: "Cycle color themes", value: "/theme"},
-		{label: "/think", desc: "Toggle reasoning display", value: "/think"},
-		{label: "/tips", desc: "Show usage tips", value: "/tips"},
-		{label: "/undo", desc: "Remove last exchange", value: "/undo"},
-		{label: "/wrap", desc: "Toggle word wrap", value: "/wrap"},
-	}
+	all := slashItems()
 	var filtered []ddItem
 	q := strings.ToLower(query)
 	for _, it := range all {
@@ -391,6 +380,20 @@ func (m *model) findLastIdx(role string) int {
 	return -1
 }
 
+// syncMessages rebuilds the request context from the visible entries so that
+// edits, deletes and undos never send stale history to the provider.
+func (m *model) syncMessages() {
+	m.messages = m.messages[:0]
+	for _, e := range m.entries {
+		switch e.role {
+		case "user":
+			m.messages = append(m.messages, models.Message{Role: models.RoleUser, Content: e.content})
+		case "assistant":
+			m.messages = append(m.messages, models.Message{Role: models.RoleAssistant, Content: e.content})
+		}
+	}
+}
+
 func (m *model) editLastUser() tea.Cmd {
 	idx := m.findLastIdx("user")
 	if idx < 0 {
@@ -398,6 +401,7 @@ func (m *model) editLastUser() tea.Cmd {
 	}
 	m.ta.SetValue(m.entries[idx].content)
 	m.entries = m.entries[:idx]
+	m.syncMessages()
 	m.ta.Focus()
 	return nil
 }
@@ -409,6 +413,7 @@ func (m *model) resendLastUser() tea.Cmd {
 	}
 	prompt := m.entries[idx].content
 	m.entries = m.entries[:idx]
+	m.syncMessages()
 	m.ta.Reset()
 	m.ta.Blur()
 	return m.submit(prompt)
@@ -424,6 +429,7 @@ func (m *model) deleteMsg() tea.Cmd {
 	} else {
 		m.entries = append(m.entries[:idx], m.entries[idx+1:]...)
 	}
+	m.syncMessages()
 	m.render()
 	return nil
 }
@@ -435,11 +441,7 @@ func (m *model) undoLast() tea.Cmd {
 	for i := len(m.entries) - 1; i >= 0; i-- {
 		if m.entries[i].role == "user" {
 			m.entries = m.entries[:i]
-			if len(m.messages) > 1 {
-				m.messages = m.messages[:len(m.messages)-2]
-			} else {
-				m.messages = nil
-			}
+			m.syncMessages()
 			m.render()
 			m.toastNow("Last exchange undone")
 			return nil
@@ -471,6 +473,7 @@ func (m *model) slash(cmd string) tea.Cmd {
 	switch p[0] {
 	case "/clear":
 		m.entries = nil
+		m.messages = nil
 		m.render()
 	case "/help":
 		m.addSys("----- Commands -----")
@@ -595,8 +598,11 @@ func (m *model) submit(prompt string) tea.Cmd {
 	m.streaming = true
 	m.quitConfirm = false
 	m.exchanges++
-	m.ws().badge = "Generating"
-	m.ws().goal = prompt
+	if m.wsData == nil {
+		m.wsData = &workspace{project: m.projectName(), badge: "Generating"}
+	}
+	m.wsData.badge = "Generating"
+	m.wsData.goal = prompt
 	m.notify("started: " + truncateStr(prompt, 48))
 	m.stopOnce = &stopOnce{ch: make(chan struct{})}
 	m.stopCh = m.stopOnce.ch
@@ -733,6 +739,8 @@ func (m *model) cancelStream() {
 		m.stopOnce = nil
 	}
 	m.stopCh = nil
+	m.finalizePartial("(cancelled)")
+	m.saveSession()
 	m.render()
 }
 

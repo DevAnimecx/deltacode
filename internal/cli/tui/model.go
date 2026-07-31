@@ -33,6 +33,8 @@ type entry struct {
 	collapsed     bool
 	ts            time.Time
 	model         string
+	mdCache       string
+	mdCached      bool
 }
 
 type theme struct {
@@ -297,9 +299,7 @@ type sessionData struct {
 }
 
 func sessionPath() string {
-	conf := filepath.Join(os.Getenv("HOME"), ".delta", "sessions")
-	os.MkdirAll(conf, 0755)
-	return filepath.Join(conf, "last.json")
+	return filepath.Join(sessionsDir(), "last.json")
 }
 
 func (m *model) saveSession() {

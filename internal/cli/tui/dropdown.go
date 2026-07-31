@@ -9,6 +9,32 @@ import (
 	"github.com/charmbracelet/lipgloss"
 )
 
+func slashItems() []ddItem {
+	return []ddItem{
+		{label: "/clear", desc: "Clear conversation", value: "/clear"},
+		{label: "/copy", desc: "Copy entire transcript", value: "/copy"},
+		{label: "/cost", desc: "Show session cost & tokens", value: "/cost"},
+		{label: "/export", desc: "Save transcript to file", value: "/export"},
+		{label: "/export-json", desc: "Export transcript as JSON", value: "/export-json"},
+		{label: "/help", desc: "Show help", value: "/help"},
+		{label: "/keys", desc: "Keyboard shortcuts overlay", value: "/keys"},
+		{label: "/minimal", desc: "Toggle minimal mode", value: "/minimal"},
+		{label: "/model", desc: "Switch model", value: "/model"},
+		{label: "/new", desc: "Start a new session", value: "/new"},
+		{label: "/provider", desc: "Switch provider", value: "/provider"},
+		{label: "/search", desc: "Search conversation", value: "/search"},
+		{label: "/sessions", desc: "List & resume sessions", value: "/sessions"},
+		{label: "/stats", desc: "Session statistics", value: "/stats"},
+		{label: "/summary", desc: "Session summary report", value: "/summary"},
+		{label: "/theme", desc: "Cycle color themes", value: "/theme"},
+		{label: "/think", desc: "Toggle reasoning display", value: "/think"},
+		{label: "/tips", desc: "Show usage tips", value: "/tips"},
+		{label: "/undo", desc: "Remove last exchange", value: "/undo"},
+		{label: "/workspace", desc: "Open engineering workspace", value: "/workspace"},
+		{label: "/wrap", desc: "Toggle word wrap", value: "/wrap"},
+	}
+}
+
 func (m *model) openDropdown(kind dropdownKind) {
 	m.dd.kind = kind
 	m.dd.query = ""
@@ -18,29 +44,7 @@ func (m *model) openDropdown(kind dropdownKind) {
 	switch kind {
 	case ddCommand:
 		m.dd.title = "Commands"
-		m.dd.items = []ddItem{
-			{label: "/clear", desc: "Clear conversation", value: "/clear"},
-			{label: "/copy", desc: "Copy entire transcript", value: "/copy"},
-			{label: "/cost", desc: "Show session cost & tokens", value: "/cost"},
-			{label: "/export", desc: "Save transcript to file", value: "/export"},
-			{label: "/export-json", desc: "Export transcript as JSON", value: "/export-json"},
-			{label: "/help", desc: "Show help", value: "/help"},
-			{label: "/keys", desc: "Keyboard shortcuts overlay", value: "/keys"},
-			{label: "/minimal", desc: "Toggle minimal mode", value: "/minimal"},
-			{label: "/model", desc: "Switch model", value: "/model"},
-			{label: "/new", desc: "Start a new session", value: "/new"},
-			{label: "/provider", desc: "Switch provider", value: "/provider"},
-			{label: "/search", desc: "Search conversation", value: "/search"},
-			{label: "/sessions", desc: "List & resume sessions", value: "/sessions"},
-			{label: "/stats", desc: "Session statistics", value: "/stats"},
-			{label: "/summary", desc: "Session summary report", value: "/summary"},
-			{label: "/theme", desc: "Cycle color themes", value: "/theme"},
-			{label: "/think", desc: "Toggle reasoning display", value: "/think"},
-			{label: "/tips", desc: "Show usage tips", value: "/tips"},
-			{label: "/undo", desc: "Remove last exchange", value: "/undo"},
-			{label: "/workspace", desc: "Open engineering workspace", value: "/workspace"},
-			{label: "/wrap", desc: "Toggle word wrap", value: "/wrap"},
-		}
+		m.dd.items = slashItems()
 		m.applyFilter()
 	case ddModel:
 		m.dd.title = "Model"
@@ -206,6 +210,8 @@ func (m *model) applyDropdownSelection() tea.Cmd {
 
 	switch m.dd.kind {
 	case ddCommand:
+		m.slash(sel.value)
+	case ddSlash:
 		m.slash(sel.value)
 	case ddModel:
 		m.modelName = sel.value

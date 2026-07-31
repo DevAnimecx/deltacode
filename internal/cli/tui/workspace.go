@@ -101,9 +101,6 @@ func (m *model) currentBadge() string {
 		}
 		return "Thinking"
 	}
-	if m.sb.Len() > 0 {
-		return "Streaming"
-	}
 	if len(m.entries) == 0 {
 		return "Idle"
 	}

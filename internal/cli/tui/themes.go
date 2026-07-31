@@ -54,6 +54,6 @@ func solarTheme() theme {
 func (m *model) cycleTheme() {
 	m.themeIdx = (m.themeIdx + 1) % len(themes)
 	m.t = themes[m.themeIdx]()
+	m.clearMD()
 	m.addSys("Theme: " + themeNames[m.themeIdx])
-	m.render()
 }

@@ -120,6 +120,10 @@ func (m *model) onChunk(c chunk) tea.Cmd {
 		m.finishStream()
 		return nil
 	}
+	if !m.streaming {
+		// Stale chunk arriving after cancel/stop/fail — drop it.
+		return m.nextChunk()
+	}
 	if c.reasoning != "" {
 		m.rb.WriteString(c.reasoning)
 	}
@@ -141,10 +145,19 @@ func (m *model) onChunk(c chunk) tea.Cmd {
 }
 
 func (m *model) finishStream() {
+	if m.stopOnce == nil {
+		// The stream was already cancelled, stopped or failed; the
+		// trailing done chunk must not touch the session state.
+		m.sb.Reset()
+		m.rb.Reset()
+		return
+	}
 	full := m.sb.String()
 	reasoning := m.rb.String()
 	m.streaming = false
 	m.statusText = "Ready"
+	m.sb.Reset()
+	m.rb.Reset()
 
 	if full != "" {
 		// Convert the streaming entry into a final assistant entry
@@ -170,7 +183,6 @@ func (m *model) finishStream() {
 	}
 
 	m.stopOnce = nil
-	m.streamCh = nil
 	m.ta.Focus()
 	m.saveSession()
 	m.render()
@@ -183,24 +195,21 @@ func (m *model) failStream(err error) {
 	m.addErr("Error: " + err.Error())
 	m.addSys("Press R to retry, or type a new prompt.")
 	m.stopOnce = nil
-	m.streamCh = nil
+	m.sb.Reset()
+	m.rb.Reset()
 	m.ta.Focus()
 	m.render()
 }
 
-// stopStream keeps any partial content as an assistant entry.
-func (m *model) stopStream() {
-	m.streaming = false
-	m.statusText = "Stopped"
-	m.stopOnce.close()
-	m.stopOnce = nil
-
+// finalizePartial converts the live streaming entry into a kept assistant
+// entry (used by stop/cancel) and resets the streaming buffers.
+func (m *model) finalizePartial(tag string) {
 	partial := m.sb.String()
 	if partial != "" {
 		if n := len(m.entries); n > 0 && m.entries[n-1].role == "streaming" {
 			m.entries[n-1] = entry{
 				role:          "assistant",
-				content:       partial + "\n\n" + m.t.dim.Render("(stopped)"),
+				content:       partial + "\n\n" + m.t.dim.Render(tag),
 				reasoning:     m.rb.String(),
 				duration:      time.Since(m.startTime),
 				tokens:        m.tok,
@@ -211,7 +220,19 @@ func (m *model) stopStream() {
 			m.messages = append(m.messages, models.Message{Role: models.RoleAssistant, Content: partial})
 		}
 	}
-	m.streamCh = nil
+	m.sb.Reset()
+	m.rb.Reset()
+}
+
+// stopStream keeps any partial content as an assistant entry.
+func (m *model) stopStream() {
+	m.streaming = false
+	m.statusText = "Stopped"
+	if m.stopOnce != nil {
+		m.stopOnce.close()
+		m.stopOnce = nil
+	}
+	m.finalizePartial("(stopped)")
 	m.ta.Focus()
 	m.saveSession()
 	m.render()

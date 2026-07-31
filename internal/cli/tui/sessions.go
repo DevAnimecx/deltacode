@@ -13,8 +13,21 @@ import (
 	tea "github.com/charmbracelet/bubbletea"
 )
 
+// homeDir returns the user's home directory. On Windows $HOME is usually
+// unset, so fall back to the OS user home directory.
+func homeDir() string {
+	if h := os.Getenv("HOME"); h != "" {
+		return h
+	}
+	h, err := os.UserHomeDir()
+	if err != nil {
+		return ""
+	}
+	return h
+}
+
 func sessionsDir() string {
-	dir := filepath.Join(os.Getenv("HOME"), ".delta", "sessions")
+	dir := filepath.Join(homeDir(), ".delta", "sessions")
 	os.MkdirAll(dir, 0755)
 	return dir
 }
@@ -26,7 +39,7 @@ func sessionFiles() []string {
 	}
 	var files []string
 	for _, e := range entries {
-		if strings.HasSuffix(e.Name(), ".json") {
+		if strings.HasSuffix(e.Name(), ".json") && !strings.HasPrefix(e.Name(), "export-") {
 			files = append(files, filepath.Join(sessionsDir(), e.Name()))
 		}
 	}
@@ -160,12 +173,12 @@ func (m *model) newSession(confirm bool) tea.Cmd {
 	}
 	m.confirmed = false
 	m.confirmAction = ""
+	m.saveSession()
 	m.messages = nil
 	m.entries = nil
 	m.cost = 0
 	m.tok = 0
 	m.sessionTitle = ""
-	m.saveSession()
 	m.splash()
 	m.render()
 	return nil

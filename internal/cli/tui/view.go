@@ -146,7 +146,8 @@ func (m *model) render() {
 		}
 	}
 
-	for i, e := range m.entries {
+	for i := range m.entries {
+		e := &m.entries[i]
 		dimmed := i < activeFrom && !m.minimal
 		switch e.role {
 		case "user":
@@ -189,7 +190,14 @@ func (m *model) render() {
 				// (reserved for per-entry collapse toggling)
 			}
 			if m.wrapEnabled {
-				out = append(out, m.renderMD(body))
+				if body != "" && !e.mdCached {
+					e.mdCache = m.renderMD(body)
+					e.mdCached = true
+				}
+				if e.mdCached {
+					body = e.mdCache
+				}
+				out = append(out, body)
 			} else {
 				out = append(out, m.renderPlainNoWrap(body))
 			}
@@ -234,6 +242,13 @@ func (m *model) render() {
 	}
 
 	m.vp.SetContent(strings.Join(out, "\n"))
+}
+
+// clearMD invalidates cached markdown bodies (needed on theme changes).
+func (m *model) clearMD() {
+	for i := range m.entries {
+		m.entries[i].mdCached = false
+	}
 }
 
 func (m *model) renderPlainNoWrap(content string) string {
