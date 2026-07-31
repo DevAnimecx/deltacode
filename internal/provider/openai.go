@@ -148,9 +148,13 @@ func (p *OpenAICompatible) Chat(req models.ChatRequest) (*models.ChatResponse, e
 	bodyBytes, _ := io.ReadAll(resp.Body)
 	bodyStr := string(bodyBytes)
 
-	// Handle both SSE-wrapped and plain JSON responses
-	var result openAIChatResponse
+	// Handle both SSE-wrapped and plain JSON responses.
 	if strings.HasPrefix(bodyStr, "data: ") {
+		var content strings.Builder
+		var reasoning strings.Builder
+		var usage *openAIUsage
+		finalID := ""
+		finalModel := ""
 		scanner := bufio.NewScanner(strings.NewReader(bodyStr))
 		for scanner.Scan() {
 			line := scanner.Text()
@@ -161,21 +165,69 @@ func (p *OpenAICompatible) Chat(req models.ChatRequest) (*models.ChatResponse, e
 			if data == "" {
 				continue
 			}
-			if err := json.Unmarshal([]byte(data), &result); err != nil {
+			var chunk openAIChatResponse
+			if err := json.Unmarshal([]byte(data), &chunk); err != nil {
 				continue
 			}
-			if len(result.Choices) > 0 {
-				break
+			if chunk.ID != "" {
+				finalID = chunk.ID
+			}
+			if chunk.Model != "" {
+				finalModel = chunk.Model
+			}
+			for _, choice := range chunk.Choices {
+				if choice.Message.Content != "" {
+					content.WriteString(choice.Message.Content)
+				}
+				if choice.Message.ReasoningContent != "" {
+					reasoning.WriteString(choice.Message.ReasoningContent)
+				}
+				if choice.Delta.Content != "" {
+					content.WriteString(choice.Delta.Content)
+				}
+				if choice.Delta.ReasoningContent != "" {
+					reasoning.WriteString(choice.Delta.ReasoningContent)
+				}
+			}
+			if chunk.Usage != nil {
+				usage = chunk.Usage
 			}
 		}
-	} else {
-		if err := json.Unmarshal(bodyBytes, &result); err != nil {
-			return nil, err
+
+		msg := content.String()
+		if msg == "" {
+			msg = reasoning.String()
 		}
+		cr := &models.ChatResponse{
+			ID:    finalID,
+			Model: finalModel,
+			Message: models.Message{
+				Role:    models.RoleAssistant,
+				Content: msg,
+			},
+		}
+		if usage != nil {
+			cr.Usage = models.Usage{
+				PromptTokens:     usage.PromptTokens,
+				CompletionTokens: usage.CompletionTokens,
+				TotalTokens:      usage.TotalTokens,
+			}
+		}
+		return cr, nil
+	}
+
+	var result openAIChatResponse
+	if err := json.Unmarshal(bodyBytes, &result); err != nil {
+		return nil, err
 	}
 
 	if len(result.Choices) == 0 {
 		return nil, fmt.Errorf("no choices returned")
+	}
+
+	content := result.Choices[0].Message.Content
+	if content == "" {
+		content = result.Choices[0].Message.ReasoningContent
 	}
 
 	cr := &models.ChatResponse{
@@ -183,7 +235,7 @@ func (p *OpenAICompatible) Chat(req models.ChatRequest) (*models.ChatResponse, e
 		Model: result.Model,
 		Message: models.Message{
 			Role:    models.RoleAssistant,
-			Content: result.Choices[0].Message.Content,
+			Content: content,
 		},
 	}
 	if result.Usage != nil {

@@ -13,24 +13,45 @@ import (
 	"unicode"
 )
 
-type Namespace string
+type Layer string
 
 const (
-	NSGlobal   Namespace = "global"
-	NSWorkspace Namespace = "workspace"
-	NSProject  Namespace = "project"
-	NSSession  Namespace = "session"
-	NSUser     Namespace = "user"
+	LayerGlobal    Layer = "global"
+	LayerWorkspace Layer = "workspace"
+	LayerRepo      Layer = "repo"
+	LayerFeature   Layer = "feature"
+	LayerTask      Layer = "task"
+	LayerSession   Layer = "session"
+	LayerTemp      Layer = "temp"
+)
+
+type Namespace = Layer
+
+const (
+	NSGlobal   Namespace = LayerGlobal
+	NSWorkspace Namespace = LayerWorkspace
+	NSProject  Namespace = LayerRepo
+	NSSession  Namespace = LayerSession
+	NSUser     Namespace = LayerFeature
 )
 
 type MemoryEntry struct {
-	ID        string    `json:"id"`
-	Namespace Namespace `json:"namespace"`
-	Key       string    `json:"key"`
-	Content   string   `json:"content"`
-	Tags      []string `json:"tags"`
-	CreatedAt time.Time `json:"created_at"`
-	Tokens    map[string]float64 `json:"-"`
+	ID          string    `json:"id"`
+	Namespace   Namespace `json:"namespace"`
+	Layer       Layer     `json:"layer"`
+	Key         string    `json:"key"`
+	Content     string    `json:"content"`
+	Tags        []string  `json:"tags"`
+	Priority    float64   `json:"priority"`
+	ExpiresAt   time.Time `json:"expires_at,omitempty"`
+	Confidence  float64   `json:"confidence"`
+	Source      string    `json:"source,omitempty"`
+	Verified    bool      `json:"verified"`
+	AccessCount int       `json:"access_count"`
+	LastAccess  time.Time `json:"last_access,omitempty"`
+	CreatedAt   time.Time `json:"created_at"`
+	UpdatedAt   time.Time `json:"updated_at"`
+	Tokens      map[string]float64 `json:"-"`
 }
 
 type SearchResult struct {
@@ -54,6 +75,13 @@ func NewMemory() *Memory {
 	return m
 }
 
+func NewMemoryAt(path string) *Memory {
+	os.MkdirAll(filepath.Dir(path), 0700)
+	m := &Memory{filePath: path}
+	m.load()
+	return m
+}
+
 func (m *Memory) load() {
 	data, err := os.ReadFile(m.filePath)
 	if err != nil {
@@ -64,9 +92,19 @@ func (m *Memory) load() {
 		return
 	}
 	for i := range entries {
+		if entries[i].Layer == "" {
+			entries[i].Layer = Layer(entries[i].Namespace)
+			if entries[i].Layer == "" {
+				entries[i].Layer = LayerGlobal
+			}
+		}
+		if entries[i].Namespace == "" {
+			entries[i].Namespace = entries[i].Layer
+		}
 		entries[i].Tokens = m.tokenize(entries[i].Content)
 	}
 	m.entries = entries
+	m.pruneExpired()
 }
 
 func (m *Memory) save() error {
@@ -77,37 +115,107 @@ func (m *Memory) save() error {
 	return os.WriteFile(m.filePath, data, 0600)
 }
 
+func (m *Memory) pruneExpired() {
+	now := time.Now()
+	kept := m.entries[:0]
+	for _, e := range m.entries {
+		if !e.ExpiresAt.IsZero() && e.ExpiresAt.Before(now) {
+			continue
+		}
+		kept = append(kept, e)
+	}
+	m.entries = kept
+}
+
 func (m *Memory) Store(ns Namespace, key, content string, tags ...string) error {
+	return m.StoreEx(ns, key, content, StoreOptions{Tags: tags})
+}
+
+type StoreOptions struct {
+	Tags       []string
+	Priority   float64
+	ExpiresAt  time.Time
+	Confidence float64
+	Source     string
+	Verified   bool
+	Layer      Layer
+}
+
+func (m *Memory) StoreEx(ns Namespace, key, content string, opts StoreOptions) error {
 	m.mu.Lock()
 	defer m.mu.Unlock()
+	m.pruneExpiredLocked()
+	now := time.Now()
+	layer := opts.Layer
+	if layer == "" {
+		layer = Layer(ns)
+		if layer == "" {
+			layer = LayerGlobal
+		}
+	}
 
 	for i, e := range m.entries {
 		if e.Namespace == ns && e.Key == key {
 			m.entries[i].Content = content
-			m.entries[i].Tags = tags
+			m.entries[i].Tags = opts.Tags
+			m.entries[i].Priority = opts.Priority
+			m.entries[i].Confidence = opts.Confidence
+			m.entries[i].Source = opts.Source
+			m.entries[i].Verified = opts.Verified
+			m.entries[i].Layer = layer
+			if !opts.ExpiresAt.IsZero() {
+				m.entries[i].ExpiresAt = opts.ExpiresAt
+			}
+			m.entries[i].UpdatedAt = now
 			m.entries[i].Tokens = m.tokenize(content)
 			return m.save()
 		}
 	}
 
 	entry := MemoryEntry{
-		ID:        fmt.Sprintf("mem-%d", time.Now().UnixNano()),
-		Namespace: ns,
-		Key:       key,
-		Content:   content,
-		Tags:      tags,
-		CreatedAt: time.Now(),
-		Tokens:    m.tokenize(content),
+		ID:         fmt.Sprintf("mem-%d", time.Now().UnixNano()),
+		Namespace:  ns,
+		Layer:      layer,
+		Key:        key,
+		Content:    content,
+		Tags:       opts.Tags,
+		Priority:   opts.Priority,
+		ExpiresAt:  opts.ExpiresAt,
+		Confidence: opts.Confidence,
+		Source:     opts.Source,
+		Verified:   opts.Verified,
+		CreatedAt:  now,
+		UpdatedAt:  now,
+		Tokens:     m.tokenize(content),
 	}
 	m.entries = append(m.entries, entry)
 	return m.save()
 }
 
-func (m *Memory) Get(ns Namespace, key string) (string, bool) {
-	m.mu.RLock()
-	defer m.mu.RUnlock()
+func (m *Memory) pruneExpiredLocked() {
+	now := time.Now()
+	kept := m.entries[:0]
 	for _, e := range m.entries {
+		if !e.ExpiresAt.IsZero() && e.ExpiresAt.Before(now) {
+			continue
+		}
+		kept = append(kept, e)
+	}
+	m.entries = kept
+}
+
+func (m *Memory) Get(ns Namespace, key string) (string, bool) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	now := time.Now()
+	for i, e := range m.entries {
 		if e.Namespace == ns && e.Key == key {
+			if !e.ExpiresAt.IsZero() && e.ExpiresAt.Before(now) {
+				m.entries = append(m.entries[:i], m.entries[i+1:]...)
+				return "", false
+			}
+			m.entries[i].AccessCount++
+			m.entries[i].LastAccess = now
 			return e.Content, true
 		}
 	}
@@ -127,8 +235,9 @@ func (m *Memory) Delete(ns Namespace, key string) {
 }
 
 func (m *Memory) Search(query string, limit int) []SearchResult {
-	m.mu.RLock()
-	defer m.mu.RUnlock()
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	m.pruneExpiredLocked()
 
 	if limit <= 0 {
 		limit = 10
@@ -137,22 +246,69 @@ func (m *Memory) Search(query string, limit int) []SearchResult {
 	queryTokens := m.tokenize(query)
 	var results []SearchResult
 
-	for _, entry := range m.entries {
-		if entry.Tokens == nil {
-			entry.Tokens = m.tokenize(entry.Content)
+	for i := range m.entries {
+		e := &m.entries[i]
+		if e.Tokens == nil {
+			e.Tokens = m.tokenize(e.Content)
 		}
-		score := m.cosineSimilarity(queryTokens, entry.Tokens)
+		score := m.cosineSimilarity(queryTokens, e.Tokens)
 
 		for qt := range queryTokens {
-			for _, tag := range entry.Tags {
+			for _, tag := range e.Tags {
 				if strings.Contains(strings.ToLower(tag), strings.ToLower(qt)) {
 					score += 0.3
 				}
 			}
 		}
 
+		// Recency boost.
+		age := time.Since(e.UpdatedAt)
+		recencyBoost := 0.25 * math.Exp(-age.Hours()/(24*30))
+		score += recencyBoost
+
+		// Priority + confidence + access.
+		score += e.Priority * 0.2
+		score += e.Confidence * 0.1
+		score += math.Min(0.15, float64(e.AccessCount)*0.02)
+
 		if score > 0 {
-			results = append(results, SearchResult{Entry: entry, Score: score})
+			results = append(results, SearchResult{Entry: *e, Score: score})
+		}
+	}
+
+	sort.Slice(results, func(i, j int) bool {
+		return results[i].Score > results[j].Score
+	})
+
+	if len(results) > limit {
+		results = results[:limit]
+	}
+	return results
+}
+
+func (m *Memory) SearchLayer(layer Layer, query string, limit int) []SearchResult {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	m.pruneExpiredLocked()
+
+	if limit <= 0 {
+		limit = 10
+	}
+
+	queryTokens := m.tokenize(query)
+	var results []SearchResult
+
+	for i := range m.entries {
+		e := &m.entries[i]
+		if e.Layer != layer {
+			continue
+		}
+		if e.Tokens == nil {
+			e.Tokens = m.tokenize(e.Content)
+		}
+		score := m.cosineSimilarity(queryTokens, e.Tokens)
+		if score > 0 {
+			results = append(results, SearchResult{Entry: *e, Score: score})
 		}
 	}
 
@@ -167,57 +323,91 @@ func (m *Memory) Search(query string, limit int) []SearchResult {
 }
 
 func (m *Memory) SearchNamespace(ns Namespace, query string, limit int) []SearchResult {
-	m.mu.RLock()
-	defer m.mu.RUnlock()
-
-	if limit <= 0 {
-		limit = 10
-	}
-
-	queryTokens := m.tokenize(query)
-	var results []SearchResult
-
-	for _, entry := range m.entries {
-		if entry.Namespace != ns {
-			continue
-		}
-		if entry.Tokens == nil {
-			entry.Tokens = m.tokenize(entry.Content)
-		}
-		score := m.cosineSimilarity(queryTokens, entry.Tokens)
-		if score > 0 {
-			results = append(results, SearchResult{Entry: entry, Score: score})
-		}
-	}
-
-	sort.Slice(results, func(i, j int) bool {
-		return results[i].Score > results[j].Score
-	})
-
-	if len(results) > limit {
-		results = results[:limit]
-	}
-	return results
+	return m.SearchLayer(Layer(ns), query, limit)
 }
 
-func (m *Memory) ListNamespaces() []Namespace {
-	m.mu.RLock()
-	defer m.mu.RUnlock()
-	seen := map[Namespace]bool{}
-	for _, e := range m.entries {
-		seen[e.Namespace] = true
+func (m *Memory) RecallRecent(layer Layer, limit int) []MemoryEntry {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	m.pruneExpiredLocked()
+	var result []MemoryEntry
+	for i := range m.entries {
+		if m.entries[i].Layer == layer {
+			result = append(result, m.entries[i])
+		}
 	}
-	var result []Namespace
-	for ns := range seen {
-		result = append(result, ns)
+	sort.Slice(result, func(i, j int) bool {
+		return result[i].UpdatedAt.After(result[j].UpdatedAt)
+	})
+	if len(result) > limit {
+		result = result[:limit]
 	}
 	return result
 }
 
-func (m *Memory) Count() int {
+func (m *Memory) Verify(ns Namespace, key string, verified bool) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	for i := range m.entries {
+		if m.entries[i].Namespace == ns && m.entries[i].Key == key {
+			m.entries[i].Verified = verified
+			if verified {
+				m.entries[i].Confidence = 1.0
+			}
+			m.entries[i].UpdatedAt = time.Now()
+			m.save()
+			return
+		}
+	}
+}
+
+func (m *Memory) SetConfidence(ns Namespace, key string, confidence float64) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	for i := range m.entries {
+		if m.entries[i].Namespace == ns && m.entries[i].Key == key {
+			m.entries[i].Confidence = confidence
+			m.entries[i].UpdatedAt = time.Now()
+			m.save()
+			return
+		}
+	}
+}
+
+func (m *Memory) ListLayers() []Layer {
 	m.mu.RLock()
 	defer m.mu.RUnlock()
+	seen := map[Layer]bool{}
+	for _, e := range m.entries {
+		seen[e.Layer] = true
+	}
+	var result []Layer
+	for l := range seen {
+		result = append(result, l)
+	}
+	return result
+}
+
+func (m *Memory) ListNamespaces() []Namespace {
+	return m.ListLayers()
+}
+
+func (m *Memory) Count() int {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	m.pruneExpiredLocked()
 	return len(m.entries)
+}
+
+func (m *Memory) PruneExpired() int {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	before := len(m.entries)
+	m.pruneExpiredLocked()
+	if len(m.entries) != before {
+		m.save()
+	}
+	return before - len(m.entries)
 }
 
 func (m *Memory) tokenize(text string) map[string]float64 {

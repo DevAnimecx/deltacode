@@ -25,7 +25,7 @@ type Manager struct {
 
 func NewManager() *Manager {
 	return &Manager{
-		currentVersion: "1.0.0",
+		currentVersion: "0.2.3",
 		repoOwner:      "delta-code",
 		repoName:       "cli",
 	}
