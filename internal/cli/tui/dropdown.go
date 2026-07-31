@@ -16,12 +16,16 @@ func slashItems() []ddItem {
 		{label: "/cost", desc: "Show session cost & tokens", value: "/cost"},
 		{label: "/export", desc: "Save transcript to file", value: "/export"},
 		{label: "/export-json", desc: "Export transcript as JSON", value: "/export-json"},
+		{label: "/agent", desc: "Toggle agent task mode", value: "/agent"},
+		{label: "/agent-task", desc: "Set agent task type", value: "/agent-task"},
+		{label: "/auto-fix", desc: "Run autonomous fix loop", value: "/auto-fix"},
 		{label: "/help", desc: "Show help", value: "/help"},
 		{label: "/keys", desc: "Keyboard shortcuts overlay", value: "/keys"},
 		{label: "/minimal", desc: "Toggle minimal mode", value: "/minimal"},
 		{label: "/model", desc: "Switch model", value: "/model"},
 		{label: "/new", desc: "Start a new session", value: "/new"},
 		{label: "/provider", desc: "Switch provider", value: "/provider"},
+		{label: "/run", desc: "Run last code block in sandbox", value: "/run"},
 		{label: "/search", desc: "Search conversation", value: "/search"},
 		{label: "/sessions", desc: "List & resume sessions", value: "/sessions"},
 		{label: "/stats", desc: "Session statistics", value: "/stats"},
@@ -93,7 +97,7 @@ func (m *model) openDropdown(kind dropdownKind) {
 			items = append(items, ddItem{
 				label:    p.Name,
 				value:    p.Name,
-				desc:     p.BaseURL,
+				desc:     fmt.Sprintf("%s %s", p.BaseURL, m.healthLatency(p.Name)),
 				selected: p.Name == m.provName,
 			})
 		}

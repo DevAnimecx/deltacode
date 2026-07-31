@@ -1,6 +1,7 @@
 package tui
 
 import (
+	"fmt"
 	"strings"
 	"sync"
 	"time"
@@ -193,7 +194,12 @@ func (m *model) failStream(err error) {
 	m.statusText = "Error"
 	m.lastError = err
 	m.addErr("Error: " + err.Error())
-	m.addSys("Press R to retry, or type a new prompt.")
+	if next := m.failover(); next != nil {
+		m.provName = next.Name
+		m.addSys(fmt.Sprintf("Provider failed — auto-switched to %s. Type a new prompt or press R to retry.", next.Name))
+	} else {
+		m.addSys("Press R to retry, or type a new prompt.")
+	}
 	m.stopOnce = nil
 	m.sb.Reset()
 	m.rb.Reset()

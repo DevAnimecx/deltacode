@@ -7,11 +7,14 @@ import (
 	"strings"
 	"time"
 
+	"github.com/DevAnimecx/deltacode/internal/autonomous"
 	"github.com/DevAnimecx/deltacode/internal/config"
 	"github.com/DevAnimecx/deltacode/internal/context"
 	"github.com/DevAnimecx/deltacode/internal/memory"
 	"github.com/DevAnimecx/deltacode/internal/router"
+	"github.com/DevAnimecx/deltacode/internal/sandbox"
 	"github.com/DevAnimecx/deltacode/internal/skill"
+	"github.com/DevAnimecx/deltacode/internal/timemachine"
 	"github.com/DevAnimecx/deltacode/pkg/models"
 	"github.com/charmbracelet/bubbles/spinner"
 	"github.com/charmbracelet/bubbles/textarea"
@@ -216,6 +219,21 @@ type model struct {
 	sessions         []sessionMeta
 	wsData           *workspace
 	helpShown        bool
+	agentMode        bool
+	taskType         string
+
+	health       *healthStore
+	tokSpeed     float64
+	lastStreamLen  int
+	lastStreamTime time.Time
+
+	autoEng      *autonomous.Engine
+	autoRunning  bool
+	autoEventsPath string
+	autoEventsPos int64
+
+	tm *timemachine.Machine
+	sbx *sandbox.Sandbox
 }
 
 func NewChatModel(cfg *config.Manager) *model {
@@ -265,8 +283,6 @@ func NewChatModel(cfg *config.Manager) *model {
 func (m *model) init() {
 	m.ctxEng, _ = context.NewEngine()
 	if m.ctxEng != nil {
-		// Keep the project context warm in the background so submit()
-		// never blocks the UI on a repo walk or git subprocesses.
 		go func() {
 			m.ctxEng.Refresh()
 			for {
@@ -274,6 +290,14 @@ func (m *model) init() {
 				m.ctxEng.Refresh()
 			}
 		}()
+	}
+	m.health = newHealthStore(m.cfg)
+	m.health.start()
+	if tm, err := timemachine.New(); err == nil {
+		m.tm = tm
+	}
+	if sbx, err := sandbox.New(); err == nil {
+		m.sbx = sbx
 	}
 	if mem, err := memory.NewProjectMemory(); err == nil {
 		m.mem = mem

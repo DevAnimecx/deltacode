@@ -194,16 +194,6 @@ func TestSendReceivesStreamedResponse(t *testing.T) {
 	}
 }
 
-// lastEntry returns the most recent entry with the given role, or nil.
-func lastEntry(m *model, role string) *entry {
-	for i := len(m.entries) - 1; i >= 0; i-- {
-		if m.entries[i].role == role {
-			return &m.entries[i]
-		}
-	}
-	return nil
-}
-
 func TestCancelKeepsPartial(t *testing.T) {
 	url, _ := fakeSSE(t, []string{"partial", " text"})
 	cfg := testCfg(t, url)

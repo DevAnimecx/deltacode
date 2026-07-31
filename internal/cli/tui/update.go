@@ -50,8 +50,19 @@ func (m *model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		if m.toast != nil && time.Now().After(m.toast.until) {
 			m.toast = nil
 		}
+		if m.streaming && time.Since(m.lastStreamTime) >= time.Second {
+			delta := m.sb.Len() - m.lastStreamLen
+			if delta > 0 {
+				m.tokSpeed = float64(delta) / time.Since(m.lastStreamTime).Seconds() / 5
+			}
+			m.lastStreamLen = m.sb.Len()
+			m.lastStreamTime = time.Now()
+		}
+		if m.autoRunning {
+			m.pollAutoEvents()
+		}
 		m.render()
-		if m.streaming || m.toast != nil {
+		if m.streaming || m.toast != nil || m.autoRunning {
 			return m, m.tick()
 		}
 		return m, nil
@@ -494,6 +505,13 @@ func (m *model) slash(cmd string) tea.Cmd {
 		m.addSys("/tips       Show usage tips")
 		m.addSys("/undo       Remove last exchange")
 		m.addSys("/wrap       Toggle word wrap")
+		m.addSys("/agent      Toggle agent task mode")
+		m.addSys("/agent-task Set agent task type")
+		m.addSys("/auto-fix   Run autonomous fix loop")
+		m.addSys("/checkpoint Save checkpoint")
+		m.addSys("/checkpoints List checkpoints")
+		m.addSys("/restore    Restore checkpoint")
+		m.addSys("/run        Run last code block")
 		m.addSys("")
 		m.addSys("----- Keys -----")
 		m.addSys("Enter       Send message")
@@ -584,6 +602,45 @@ func (m *model) slash(cmd string) tea.Cmd {
 		} else {
 			m.addSys("Exported JSON: " + path)
 		}
+	case "/agent":
+		m.toggleAgentMode()
+	case "/agent-task":
+		if len(p) > 1 {
+			m.setTaskType(strings.ToLower(p[1]))
+		} else {
+			m.addSys("Usage: /agent-task <general|coding|refactor|debug|test>")
+		}
+	case "/auto-fix":
+		goal := strings.Join(p[1:], " ")
+		if goal == "" {
+			goal = m.lastPrompt
+		}
+		m.startAutoFix(goal)
+	case "/checkpoint":
+		m.saveCheckpoint("")
+	case "/checkpoints":
+		cps := m.listCheckpoints()
+		if len(cps) == 0 {
+			m.addSys("No checkpoints yet.")
+		} else {
+			for _, cp := range cps {
+				m.addSys(fmt.Sprintf("  %s  %s  %s", cp.ID[:8], cp.Timestamp.Format("15:04:05"), truncateStr(cp.Label, 32)))
+			}
+		}
+	case "/restore":
+		if len(p) > 1 {
+			m.restoreCheckpoint(p[1])
+		} else {
+			cps := m.listCheckpoints()
+			if len(cps) == 0 {
+				m.addSys("No checkpoints to restore.")
+			} else {
+				m.addSys("Latest: " + cps[0].ID)
+				m.restoreCheckpoint(cps[0].ID)
+			}
+		}
+	case "/run":
+		m.runLastCodeBlock()
 	default:
 		m.addSys("Unknown: " + cmd + "  (try /help)")
 	}
@@ -608,6 +665,9 @@ func (m *model) submit(prompt string) tea.Cmd {
 	m.stopCh = m.stopOnce.ch
 	m.sb.Reset()
 	m.rb.Reset()
+	m.tokSpeed = 0
+	m.lastStreamLen = 0
+	m.lastStreamTime = time.Now()
 	m.render()
 	m.vp.GotoBottom()
 	m.atBottom = true

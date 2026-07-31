@@ -61,7 +61,11 @@ func (m *model) keysHelp() string {
 
 func (m *model) header() string {
 	l := m.t.head.Render(" Δ ")
-	i := m.t.subh.Render(fmt.Sprintf(" %s • %s ", m.modelName, m.provName))
+	provPart := fmt.Sprintf(" • %s", m.provName)
+	if m.health != nil {
+		provPart = fmt.Sprintf(" %s• %s", m.healthDot(m.provName), m.provName)
+	}
+	i := m.t.subh.Render(fmt.Sprintf(" %s%s ", m.modelName, provPart))
 	if m.minimal {
 		i = m.t.subh.Render(" " + m.modelName + " ")
 	}
@@ -91,11 +95,19 @@ func (m *model) status() string {
 	if m.scrollLocked && !m.streaming {
 		lock = m.t.badge.Render("  lock ")
 	}
+	speed := ""
+	if m.streaming && m.tokSpeed > 0 {
+		speed = m.t.dim.Render(fmt.Sprintf(" %dtok/s ", int(m.tokSpeed)))
+	}
+	agentInfo := ""
+	if m.agentMode {
+		agentInfo = m.t.badge.Render("  agent:" + m.taskType + " ")
+	}
 	var toast string
 	if m.toast != nil {
 		toast = m.t.badge.Render("  " + m.toast.text + " ")
 	}
-	l := m.t.stat.Render(fmt.Sprintf(" %s%s%s%s", p, m.statusText, inputInfo, lock))
+	l := m.t.stat.Render(fmt.Sprintf(" %s%s%s%s%s%s", p, m.statusText, inputInfo, speed, lock, agentInfo))
 	r := m.t.dim.Render(fmt.Sprintf("msgs:%d  $%.4f  %dtok", len(m.entries), m.cost, m.tok))
 	if toast != "" {
 		r = toast + " " + r
@@ -122,6 +134,8 @@ func (m *model) footer() string {
 	return fmt.Sprintf("%s\n %s", m.t.brd.Render(strings.Repeat("─", max(0, m.w-2))), strings.Join(p, "  "))
 }
 
+const maxRenderedEntries = 300
+
 func (m *model) render() {
 	var out []string
 	atEnd := m.vp.ScrollPercent() >= 0.99
@@ -132,6 +146,13 @@ func (m *model) render() {
 	if !atEnd && len(m.entries) > 3 {
 		rem := m.vp.TotalLineCount() - m.vp.YOffset
 		out = append(out, m.t.scr.Render(fmt.Sprintf("  ↑ %d more — press g to jump  ", rem)))
+		out = append(out, "")
+	}
+
+	renderStart := 0
+	if len(m.entries) > maxRenderedEntries {
+		renderStart = len(m.entries) - maxRenderedEntries
+		out = append(out, m.t.dim.Render(fmt.Sprintf("  … %d older messages hidden …", len(m.entries)-maxRenderedEntries)))
 		out = append(out, "")
 	}
 
@@ -147,6 +168,9 @@ func (m *model) render() {
 	}
 
 	for i := range m.entries {
+		if i < renderStart {
+			continue
+		}
 		e := &m.entries[i]
 		dimmed := i < activeFrom && !m.minimal
 		switch e.role {
@@ -237,6 +261,9 @@ func (m *model) render() {
 		stat := fmt.Sprintf(" %s Thinking  %.1fs ", dots[m.dotTick%len(dots)], elapsed)
 		if m.tok > 0 {
 			stat += fmt.Sprintf(" %dtok $%.4f ", m.tok, m.cost)
+		}
+		if m.tokSpeed > 0 {
+			stat += fmt.Sprintf(" %dtok/s ", int(m.tokSpeed))
 		}
 		out = append(out, m.t.badge.Render(stat))
 	}
