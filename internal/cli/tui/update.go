@@ -847,18 +847,34 @@ func (m *model) submit(prompt string) tea.Cmd {
 				}
 				sb.WriteString(fmt.Sprintf("%d. %s\n", i+1, c))
 			}
-			msgs = append(msgs, models.Message{Role: models.RoleSystem, Content: sb.String()})
+			sysCtx := sb.String()
+			if len(sysCtx) > 3000 {
+				sysCtx = sysCtx[:3000] + "..."
+			}
+			msgs = append(msgs, models.Message{Role: models.RoleSystem, Content: sysCtx})
 		}
 	}
 
+	const maxMsgChars = 4000
+	const maxHistory = 10
 	if len(m.messages) > 0 {
 		start := 0
-		if len(m.messages) > 10 {
-			start = len(m.messages) - 10
+		if len(m.messages) > maxHistory {
+			start = len(m.messages) - maxHistory
 		}
-		msgs = append(msgs, m.messages[start:]...)
+		for _, msg := range m.messages[start:] {
+			c := msg.Content
+			if len(c) > maxMsgChars {
+				c = c[:maxMsgChars] + "... (truncated)"
+			}
+			msgs = append(msgs, models.Message{Role: msg.Role, Content: c})
+		}
 	}
 
+	maxPrompt := 20000
+	if len(ctxPrompt) > maxPrompt {
+		ctxPrompt = ctxPrompt[:maxPrompt] + "... (context truncated)"
+	}
 	msgs = append(msgs, models.Message{Role: models.RoleUser, Content: ctxPrompt})
 
 	req := models.ChatRequest{

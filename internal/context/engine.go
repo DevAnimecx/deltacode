@@ -116,26 +116,66 @@ func (e *Engine) BuildPrompt(userPrompt string) string {
 
 func (e *Engine) renderPrompt(ctx *Context, userPrompt string) string {
 	var b strings.Builder
+	totalLen := 0
+	maxTotal := 30000
 
 	b.WriteString("Project Context:\n")
+	totalLen += 17
 
 	if ctx.Readme != "" {
-		b.WriteString(fmt.Sprintf("\nREADME:\n%s\n", truncate(ctx.Readme, 500)))
+		s := truncate(ctx.Readme, 500)
+		if totalLen+len(s) > maxTotal {
+			s = truncate(s, maxTotal-totalLen)
+		}
+		b.WriteString(fmt.Sprintf("\nREADME:\n%s\n", s))
+		totalLen += len(s) + 12
 	}
 	if ctx.PackageJSON != "" {
-		b.WriteString(fmt.Sprintf("\nDependencies:\n%s\n", truncate(ctx.PackageJSON, 500)))
+		s := truncate(ctx.PackageJSON, 500)
+		if totalLen+len(s) > maxTotal {
+			s = truncate(s, maxTotal-totalLen)
+		}
+		b.WriteString(fmt.Sprintf("\nDependencies:\n%s\n", s))
+		totalLen += len(s) + 17
 	}
 	if ctx.FileTree != "" {
-		b.WriteString(fmt.Sprintf("\nFile Tree:\n%s\n", ctx.FileTree))
+		s := ctx.FileTree
+		if len(s) > 3000 {
+			lines := strings.Split(s, "\n")
+			if len(lines) > 100 {
+				s = strings.Join(lines[:100], "\n") + fmt.Sprintf("\n... (%d more files)", len(lines)-100)
+			}
+			s = truncate(s, 3000)
+		}
+		if totalLen+len(s) > maxTotal {
+			s = truncate(s, maxTotal-totalLen)
+		}
+		b.WriteString(fmt.Sprintf("\nFile Tree:\n%s\n", s))
+		totalLen += len(s) + 12
 	}
 	if ctx.GitLog != "" {
-		b.WriteString(fmt.Sprintf("\nRecent Git History:\n%s\n", ctx.GitLog))
+		s := truncate(ctx.GitLog, 500)
+		if totalLen+len(s) > maxTotal {
+			s = truncate(s, maxTotal-totalLen)
+		}
+		b.WriteString(fmt.Sprintf("\nRecent Git History:\n%s\n", s))
+		totalLen += len(s) + 21
 	}
 	if ctx.GitDiff != "" {
-		b.WriteString(fmt.Sprintf("\nUncommitted Changes:\n%s\n", truncate(ctx.GitDiff, 1000)))
+		s := truncate(ctx.GitDiff, 1000)
+		if totalLen+len(s) > maxTotal {
+			s = truncate(s, maxTotal-totalLen)
+		}
+		b.WriteString(fmt.Sprintf("\nUncommitted Changes:\n%s\n", s))
+		totalLen += len(s) + 23
 	}
 	if ctx.Errors != "" {
-		b.WriteString(fmt.Sprintf("\nWorking Tree State:\n%s\n", ctx.Errors))
+		s := truncate(ctx.Errors, 500)
+		if totalLen+len(s) > maxTotal {
+			s = truncate(s, maxTotal-totalLen)
+		}
+		b.WriteString(fmt.Sprintf("\nWorking Tree State:\n%s\n", s))
+		totalLen += len(s) + 21
 	}
 
 	b.WriteString(fmt.Sprintf("\nUser Request:\n%s\n", userPrompt))
@@ -148,7 +188,11 @@ func (e *Engine) readFileIfExists(path string) string {
 	if err != nil {
 		return ""
 	}
-	return strings.TrimSpace(string(data))
+	s := strings.TrimSpace(string(data))
+	if len(s) > 5000 {
+		s = s[:5000] + "..."
+	}
+	return s
 }
 
 func (e *Engine) capture(name string, args ...string) string {
@@ -160,11 +204,16 @@ func (e *Engine) capture(name string, args ...string) string {
 	if err := cmd.Run(); err != nil {
 		return ""
 	}
-	return strings.TrimSpace(out.String())
+	s := strings.TrimSpace(out.String())
+	if len(s) > 10000 {
+		s = s[:10000] + "..."
+	}
+	return s
 }
 
 func (e *Engine) buildFileTree() string {
 	var b strings.Builder
+	count := 0
 	filepath.Walk(e.projectDir, func(path string, info os.FileInfo, err error) error {
 		if err != nil || info.IsDir() {
 			rel, _ := filepath.Rel(e.projectDir, path)
@@ -173,9 +222,13 @@ func (e *Engine) buildFileTree() string {
 			}
 			return nil
 		}
+		if count >= 500 {
+			return filepath.SkipDir
+		}
 		rel, _ := filepath.Rel(e.projectDir, path)
 		if !strings.HasPrefix(rel, ".") {
 			b.WriteString(rel + "\n")
+			count++
 		}
 		return nil
 	})
