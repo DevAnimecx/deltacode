@@ -5,6 +5,8 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+
+	tea "github.com/charmbracelet/bubbletea"
 )
 
 type codeBlock struct {
@@ -128,4 +130,64 @@ func min(a, b int) int {
 		return a
 	}
 	return b
+}
+
+func (m *model) copyBlock(idx int) tea.Cmd {
+	blocks := m.lastBlocks()
+	if len(blocks) == 0 {
+		m.toastNow("No code blocks found")
+		return nil
+	}
+	if idx >= len(blocks) {
+		m.toastNow(fmt.Sprintf("Only %d code block(s) available", len(blocks)))
+		return nil
+	}
+	if err := clipboardWrite(blocks[idx].code); err != nil {
+		m.addSys("Copy failed: " + err.Error())
+		return nil
+	}
+	lang := blocks[idx].language
+	if lang == "" {
+		lang = "code"
+	}
+	m.toastNow(fmt.Sprintf("Copied block %d (%s)", idx+1, lang))
+	return nil
+}
+
+func (m *model) saveBlock(idx int) tea.Cmd {
+	blocks := m.lastBlocks()
+	if len(blocks) == 0 {
+		m.toastNow("No code blocks found")
+		return nil
+	}
+	if idx >= len(blocks) {
+		m.toastNow(fmt.Sprintf("Only %d code block(s) available", len(blocks)))
+		return nil
+	}
+	block := blocks[idx]
+	filename := block.filename
+	if filename == "" {
+		filename = "output.txt"
+	}
+	path := filename
+	if _, err := os.Stat(path); err == nil {
+		ext := filepath.Ext(filename)
+		base := strings.TrimSuffix(filename, ext)
+		path = fmt.Sprintf("%s-1%s", base, ext)
+	}
+	if err := os.WriteFile(path, []byte(block.code), 0644); err != nil {
+		m.addSys("Save failed: " + err.Error())
+		return nil
+	}
+	m.toastNow("Created " + path)
+	return nil
+}
+
+func (m *model) lastBlocks() []codeBlock {
+	for i := len(m.entries) - 1; i >= 0; i-- {
+		if m.entries[i].role == "assistant" && m.entries[i].content != "" {
+			return extractCodeBlocks(m.entries[i].content)
+		}
+	}
+	return nil
 }

@@ -11,20 +11,25 @@ import (
 
 func (m *model) View() string {
 	m.render()
-	return lipgloss.JoinVertical(lipgloss.Left,
+	parts := []string{
 		m.header(),
-		m.t.sep.Render("─"+strings.Repeat("─", max(m.w-2, 0))+"─"),
+		m.t.sep.Render("─" + strings.Repeat("─", max(m.w-2, 0)) + "─"),
 		m.vp.View(),
-		m.ta.View(),
-		m.status(),
-		m.footer(),
-	)
+	}
+	if dd := m.dropdownView(); dd != "" {
+		parts = append(parts, dd)
+	}
+	parts = append(parts, m.ta.View(), m.status(), m.footer())
+	return lipgloss.JoinVertical(lipgloss.Left, parts...)
 }
 
 func (m *model) header() string {
 	l := m.t.head.Render(" Δ ")
 	i := m.t.subh.Render(fmt.Sprintf(" %s • %s ", m.modelName, m.provName))
-	ts := m.t.stat.Render(time.Now().Format("15:04:05"))
+	if m.minimal {
+		i = m.t.subh.Render(" " + m.modelName + " ")
+	}
+	ts := m.t.stat.Render(time.Now().Format("Jan 02 15:04"))
 	sp := m.w - lipgloss.Width(l) - lipgloss.Width(i) - lipgloss.Width(ts) - 4
 	if sp < 1 {
 		sp = 1
@@ -42,8 +47,19 @@ func (m *model) status() string {
 	if inputLen > 0 {
 		inputInfo = m.t.dim.Render(fmt.Sprintf(" %dch ", inputLen))
 	}
-	l := m.t.stat.Render(fmt.Sprintf(" %s%s%s", p, m.statusText, inputInfo))
+	var lock string
+	if m.scrollLocked && !m.streaming {
+		lock = m.t.badge.Render("  lock ")
+	}
+	var toast string
+	if m.toast != nil {
+		toast = m.t.badge.Render("  "+m.toast.text+" ")
+	}
+	l := m.t.stat.Render(fmt.Sprintf(" %s%s%s%s", p, m.statusText, inputInfo, lock))
 	r := m.t.dim.Render(fmt.Sprintf("msgs:%d  $%.4f  %dtok", len(m.entries), m.cost, m.tok))
+	if toast != "" {
+		r = toast + " " + r
+	}
 	sp := m.w - lipgloss.Width(l) - lipgloss.Width(r) - 2
 	if sp < 1 {
 		sp = 1
@@ -52,10 +68,12 @@ func (m *model) status() string {
 }
 
 func (m *model) footer() string {
+	if m.minimal {
+		return m.t.brd.Render(strings.Repeat("─", max(0, m.w-2)))
+	}
 	keys := []struct{ k, d string }{
-		{"Enter", "send"}, {"Esc", "stop"}, {"Tab", "focus"},
-		{"↑↓", "hist"}, {"↑↓", "scroll"}, {"j/k", "scroll"},
-		{"/help", "cmds"}, {"Ctrl+L", "clear"}, {"Ctrl+C", "quit"},
+		{"Enter", "send"}, {"Ctrl+K", "palette"}, {"Ctrl+M", "model"}, {"Ctrl+P", "provider"},
+		{"↑↓", "hist"}, {"j/k", "scroll"}, {"/help", "cmds"}, {"Esc", "stop"}, {"Ctrl+C", "quit"},
 	}
 	var p []string
 	for _, x := range keys {
@@ -67,25 +85,51 @@ func (m *model) footer() string {
 func (m *model) render() {
 	var out []string
 	atEnd := m.vp.ScrollPercent() >= 0.99
-	m.atBottom = atEnd
+	if !m.scrollLocked {
+		m.atBottom = atEnd
+	}
 
 	if !atEnd && len(m.entries) > 3 {
 		rem := m.vp.TotalLineCount() - m.vp.YOffset
-		out = append(out, m.t.scr.Render(fmt.Sprintf("  ↑ %d more  ", rem)))
+		out = append(out, m.t.scr.Render(fmt.Sprintf("  ↑ %d more — press g to jump  ", rem)))
 		out = append(out, "")
 	}
 
-	for _, e := range m.entries {
+	// Dim entries older than the last 4.
+	activeFrom := 0
+	for i, e := range m.entries {
+		if e.role == "user" || e.role == "assistant" {
+			activeFrom = i
+			if len(m.entries)-i < 6 {
+				break
+			}
+		}
+	}
+
+	for i, e := range m.entries {
+		dimmed := i < activeFrom && !m.minimal
 		switch e.role {
 		case "user":
-			out = append(out, m.t.uP.String())
+			style := m.t.uP
+			if dimmed {
+				style = style.Foreground(lipgloss.Color("242"))
+			}
+			out = append(out, style.String())
 			for _, line := range strings.Split(e.content, "\n") {
-				out = append(out, m.t.uM.Render("  "+line))
+				if dimmed {
+					out = append(out, m.t.dim.Render("  "+line))
+				} else {
+					out = append(out, m.t.uM.Render("  "+line))
+				}
 			}
 		case "assistant":
-			out = append(out, m.t.aP.String())
-			if e.reasoning != "" {
-				if e.showReasoning {
+			ap := m.t.aP
+			if dimmed {
+				ap = ap.Foreground(lipgloss.Color("242"))
+			}
+			out = append(out, ap.String())
+			if e.reasoning != "" && !m.minimal {
+				if e.showReasoning && m.reasoningVisible {
 					out = append(out, m.t.badge.Render(fmt.Sprintf(" ▼ %d tok reasoning", len(strings.Fields(e.reasoning)))))
 					out = append(out, "")
 					for _, line := range strings.Split(e.reasoning, "\n") {
@@ -101,12 +145,19 @@ func (m *model) render() {
 				}
 			}
 			body := e.content
-			if e.collapsed && len(body) > 200 {
-				body = body[:200] + "\n\n" + m.t.dim.Render("  [▼ " + fmt.Sprintf("%d more chars]", len(body)-200))
+			if e.collapsed && m.collapseLong && len(body) > 400 && !m.scrollLocked && false {
+				// (reserved for per-entry collapse toggling)
 			}
-			out = append(out, m.renderMD(body))
-			if e.duration > 0 || e.tokens > 0 || e.cost > 0 {
+			if m.wrapEnabled {
+				out = append(out, m.renderMD(body))
+			} else {
+				out = append(out, m.renderPlainNoWrap(body))
+			}
+			if e.duration > 0 || e.tokens > 0 || e.cost > 0 || !e.ts.IsZero() {
 				var parts []string
+				if !e.ts.IsZero() {
+					parts = append(parts, e.ts.Format("15:04"))
+				}
 				if e.duration > 0 {
 					parts = append(parts, fmt.Sprintf("%.1fs", e.duration.Seconds()))
 				}
@@ -115,6 +166,9 @@ func (m *model) render() {
 				}
 				if e.cost > 0 {
 					parts = append(parts, fmt.Sprintf("$%.4f", e.cost))
+				}
+				if e.model != "" {
+					parts = append(parts, e.model)
 				}
 				out = append(out, m.t.meta.Render("  "+strings.Join(parts, " · ")))
 			}
@@ -132,10 +186,23 @@ func (m *model) render() {
 	if m.streaming {
 		elapsed := time.Since(m.startTime).Seconds()
 		dots := []string{"⠋", "⠙", "⠹", "⠸", "⠼", "⠴", "⠦", "⠧", "⠇", "⠏"}
-		out = append(out, m.t.badge.Render(fmt.Sprintf(" %s Thinking  %.1fs ", dots[m.dotTick%len(dots)], elapsed)))
+		stat := fmt.Sprintf(" %s Thinking  %.1fs ", dots[m.dotTick%len(dots)], elapsed)
+		if m.tok > 0 {
+			stat += fmt.Sprintf(" %dtok $%.4f ", m.tok, m.cost)
+		}
+		out = append(out, m.t.badge.Render(stat))
 	}
 
 	m.vp.SetContent(strings.Join(out, "\n"))
+}
+
+func (m *model) renderPlainNoWrap(content string) string {
+	s := lipgloss.NewStyle().Padding(0, 2).Foreground(lipgloss.Color("252"))
+	var out []string
+	for _, line := range strings.Split(content, "\n") {
+		out = append(out, s.Render("  "+line))
+	}
+	return strings.Join(out, "\n")
 }
 
 func (m *model) renderMD(content string) string {
@@ -175,9 +242,16 @@ func (m *model) addCodeBadges(glamRendered, rawContent string) string {
 				label = " " + b.filename + " "
 			}
 			result = append(result, m.t.codeL.Render(label))
-			result = append(result, m.t.badge.Render(" y)copy"))
-			if b.filename != "" {
-				result = append(result, m.t.badge.Render(" w)save"))
+			if len(blocks) > 1 {
+				result = append(result, m.t.badge.Render(fmt.Sprintf(" y%d)copy", blockIdx+1)))
+				if b.filename != "" {
+					result = append(result, m.t.badge.Render(fmt.Sprintf(" s%d)save", blockIdx+1)))
+				}
+			} else {
+				result = append(result, m.t.badge.Render(" y)copy"))
+				if b.filename != "" {
+					result = append(result, m.t.badge.Render(" w)save"))
+				}
 			}
 			blockIdx++
 			continue
@@ -254,14 +328,20 @@ func (m *model) streamRender(content string) string {
 
 func (m *model) addUser(c string) {
 	m.messages = append(m.messages, models.Message{Role: models.RoleUser, Content: c})
-	m.entries = append(m.entries, entry{role: "user", content: c})
+	m.entries = append(m.entries, entry{role: "user", content: c, ts: time.Now()})
 }
 
 func (m *model) addAsst(c string, reasoning string) {
 	m.entries = append(m.entries, entry{
-		role: "assistant", content: c, reasoning: reasoning,
-		duration: time.Since(m.startTime), tokens: m.tok, cost: m.cost,
-		showReasoning: true,
+		role:          "assistant",
+		content:       c,
+		reasoning:     reasoning,
+		duration:      time.Since(m.startTime),
+		tokens:        m.tok,
+		cost:          m.cost,
+		showReasoning: m.reasoningVisible,
+		ts:            time.Now(),
+		model:         m.modelName,
 	})
 }
 

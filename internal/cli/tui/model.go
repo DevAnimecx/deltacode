@@ -22,15 +22,17 @@ import (
 )
 
 type entry struct {
-	role           string
-	content        string
-	reasoning      string
-	duration       time.Duration
-	tokens         int
-	cost           float64
-	showReasoning  bool
-	showMore       bool
-	collapsed      bool
+	role          string
+	content       string
+	reasoning     string
+	duration      time.Duration
+	tokens        int
+	cost          float64
+	showReasoning bool
+	showMore      bool
+	collapsed     bool
+	ts            time.Time
+	model         string
 }
 
 type theme struct {
@@ -91,9 +93,70 @@ type chunk struct {
 	reasoning string
 	done      bool
 	err       error
+	usage     *models.Usage
 }
 
 type tick struct{}
+
+type dropdownKind int
+
+const (
+	ddNone dropdownKind = iota
+	ddCommand
+	ddModel
+	ddProvider
+	ddSlash
+)
+
+type ddItem struct {
+	label    string
+	value    string
+	desc     string
+	selected bool
+}
+
+type dropdown struct {
+	kind     dropdownKind
+	open     bool
+	items    []ddItem
+	filtered []ddItem
+	cursor   int
+	query    string
+	title    string
+}
+
+type toastMsg struct {
+	text string
+	until time.Time
+}
+
+func (d *dropdown) setOpen(open bool) { d.open = open }
+
+func (d *dropdown) visible() bool { return d.open && len(d.filtered) > 0 }
+
+type sessionMeta struct {
+	File     string    `json:"-"`
+	Title    string    `json:"title"`
+	Messages int       `json:"messages"`
+	Cost     float64   `json:"cost"`
+	Updated  time.Time `json:"updated"`
+	Model    string    `json:"model"`
+}
+
+func (m *model) toastNow(text string) {
+	m.toast = &toastMsg{text: text, until: time.Now().Add(3 * time.Second)}
+}
+
+func (m *model) confirmAndReset(action string) bool {
+	if m.confirmed && m.confirmAction == action {
+		m.confirmed = false
+		m.confirmAction = ""
+		return true
+	}
+	m.confirmed = true
+	m.confirmAction = action
+	return false
+}
 
 type model struct {
 	vp       viewport.Model
@@ -130,6 +193,25 @@ type model struct {
 	atBottom     bool
 	stopCh       chan struct{}
 	quitConfirm  bool
+
+	dd           dropdown
+	ddInput      string
+	themeIdx     int
+	scrollLocked bool
+	reasoningVisible bool
+	collapseLong bool
+	minimal      bool
+	wrapEnabled  bool
+	sessionTitle string
+	lastError    error
+	toast        *toastMsg
+	stopOnce     *stopOnce
+	exchanges    int
+	tipsShown    bool
+	statIdx      int
+	confirmed    bool
+	confirmAction string
+	sessions     []sessionMeta
 }
 
 func NewChatModel(cfg *config.Manager) *model {
@@ -160,6 +242,9 @@ func NewChatModel(cfg *config.Manager) *model {
 		w: 80, h: 24, glam: g, atBottom: true,
 		inputHistory: []string{},
 		historyIdx:   -1,
+		reasoningVisible: true,
+		collapseLong: true,
+		wrapEnabled:  true,
 	}
 
 	m.vp.Width = 78
@@ -201,8 +286,11 @@ func (m *model) init() {
 
 type sessionData struct {
 	Messages []models.Message `json:"messages"`
-	Cost     float64         `json:"cost"`
-	Tokens   int             `json:"tokens"`
+	Cost     float64          `json:"cost"`
+	Tokens   int              `json:"tokens"`
+	Title    string           `json:"title"`
+	Model    string           `json:"model"`
+	Provider string           `json:"provider"`
 }
 
 func sessionPath() string {
@@ -216,6 +304,9 @@ func (m *model) saveSession() {
 		Messages: m.messages,
 		Cost:     m.cost,
 		Tokens:   m.tok,
+		Title:    m.sessionTitle,
+		Model:    m.modelName,
+		Provider: m.provName,
 	}
 	if b, err := json.Marshal(data); err == nil {
 		os.WriteFile(sessionPath(), b, 0644)
@@ -229,6 +320,13 @@ func (m *model) loadSession() {
 			m.messages = data.Messages
 			m.cost = data.Cost
 			m.tok = data.Tokens
+			m.sessionTitle = data.Title
+			if data.Model != "" {
+				m.modelName = data.Model
+			}
+			if data.Provider != "" {
+				m.provName = data.Provider
+			}
 		}
 	}
 }
@@ -244,8 +342,12 @@ func (m *model) splash() {
 	} {
 		m.entries = append(m.entries, entry{role: "system", content: m.t.logo.Render(s)})
 	}
-	m.addSys("v0.2.1  |  Model: " + m.modelName + "  |  Provider: " + m.provName)
+	m.addSys("v0.2.2  |  Model: " + m.modelName + "  |  Provider: " + m.provName)
+	if m.sessionTitle != "" {
+		m.addSys("Session: " + m.sessionTitle)
+	}
 	m.addSys("Type a prompt and press Enter — or type /help for commands.")
+	m.showTip()
 }
 
 func (m *model) Init() tea.Cmd {

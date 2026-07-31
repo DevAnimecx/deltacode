@@ -17,6 +17,9 @@ func (m *model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.w = v.Width
 		m.h = v.Height
 		vpH := m.h - 9
+		if m.dd.visible() {
+			vpH -= 8
+		}
 		if vpH < 5 {
 			vpH = 5
 		}
@@ -32,28 +35,6 @@ func (m *model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return m, nil
 
 	case tea.KeyMsg:
-		if v.String() == "ctrl+c" {
-			if m.streaming {
-				m.cancelStream()
-				m.addSys("Cancelled.")
-				return m, nil
-			}
-			if m.quitConfirm {
-				m.saveSession()
-				return m, tea.Quit
-			}
-			m.quitConfirm = true
-			m.addSys("Press Ctrl+C again to quit.")
-			return m, nil
-		}
-		m.quitConfirm = false
-		if m.streaming {
-			if v.String() == "esc" {
-				m.cancelStream()
-				m.addSys("Cancelled.")
-			}
-			return m, nil
-		}
 		return m, m.onKey(v)
 
 	case spinner.TickMsg:
@@ -65,20 +46,80 @@ func (m *model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 	case tick:
 		m.dotTick = (m.dotTick + 1) % 4
+		if m.toast != nil && time.Now().After(m.toast.until) {
+			m.toast = nil
+		}
 		m.render()
 		if m.streaming {
 			return m, m.tick()
 		}
 		return m, nil
-
 	}
 
 	return m, nil
 }
 
 func (m *model) onKey(msg tea.KeyMsg) tea.Cmd {
+	if m.dd.visible() {
+		return m.onDropdownKey(msg)
+	}
+
+	switch msg.String() {
+	case "ctrl+c":
+		if m.streaming {
+			m.cancelStream()
+			m.addSys("Cancelled.")
+			return nil
+		}
+		if m.quitConfirm {
+			m.saveSession()
+			return tea.Quit
+		}
+		m.quitConfirm = true
+		m.addSys("Press Ctrl+C again to quit.")
+		return nil
+	}
+	m.quitConfirm = false
+
+	if m.streaming {
+		switch msg.String() {
+		case "esc":
+			m.stopStream()
+			m.addSys("Stopped - partial response kept.")
+		case "ctrl+k", "ctrl+m", "ctrl+p":
+			m.addSys("Wait for the response to finish.")
+		}
+		return nil
+	}
+
+	switch msg.String() {
+	case "ctrl+k":
+		m.openDropdown(ddCommand)
+		return nil
+	case "ctrl+m":
+		m.openDropdown(ddModel)
+		return nil
+	case "ctrl+p":
+		m.openDropdown(ddProvider)
+		return nil
+	case "ctrl+n":
+		return m.newSession(true)
+	case "ctrl+s":
+		m.saveSession()
+		m.toastNow("Session saved")
+		return nil
+	}
+
+	return m.onInputKey(msg)
+}
+
+func (m *model) onInputKey(msg tea.KeyMsg) tea.Cmd {
 	switch msg.String() {
 	case "enter":
+		if m.dd.kind == ddSlash && m.dd.open && len(m.dd.filtered) > 0 {
+			m.applySlashItem(m.dd.filtered[m.dd.cursor].value)
+			return nil
+		}
 		t := strings.TrimSpace(m.ta.Value())
 		if t == "" {
 			return nil
@@ -87,10 +128,18 @@ func (m *model) onKey(msg tea.KeyMsg) tea.Cmd {
 		m.historyIdx = -1
 		m.ta.Reset()
 		if strings.HasPrefix(t, "/") {
+			m.dd.setOpen(false)
 			return m.slash(t)
 		}
 		m.ta.Blur()
 		return m.submit(t)
+
+	case "shift+enter":
+		if m.ta.Focused() {
+			m.ta.InsertString("\n")
+			return nil
+		}
+		return m.submit(strings.TrimSpace(m.ta.Value()))
 
 	case "up":
 		if m.ta.Focused() && len(m.inputHistory) > 0 {
@@ -102,8 +151,10 @@ func (m *model) onKey(msg tea.KeyMsg) tea.Cmd {
 			m.ta.SetValue(m.inputHistory[m.historyIdx])
 			return nil
 		}
-		m.vp, _ = m.vp.Update(msg)
-		return nil
+		if !m.ta.Focused() {
+			m.vp.LineUp(1)
+			return nil
+		}
 
 	case "down":
 		if m.ta.Focused() && m.historyIdx >= 0 {
@@ -116,8 +167,10 @@ func (m *model) onKey(msg tea.KeyMsg) tea.Cmd {
 			m.ta.SetValue(m.inputHistory[m.historyIdx])
 			return nil
 		}
-		m.vp, _ = m.vp.Update(msg)
-		return nil
+		if !m.ta.Focused() {
+			m.vp.LineDown(1)
+			return nil
+		}
 
 	case "tab":
 		if m.ta.Focused() {
@@ -126,32 +179,70 @@ func (m *model) onKey(msg tea.KeyMsg) tea.Cmd {
 			m.ta.Focus()
 		}
 		return nil
+	case "shift+tab":
+		if m.ta.Focused() {
+			m.ta.Blur()
+		} else {
+			m.ta.Focus()
+		}
+		return nil
 
 	case "ctrl+l":
+		if len(m.entries) > 5 && !m.confirmed {
+			m.confirmed = true
+			m.addSys("Clear " + fmt.Sprintf("%d messages? ", len(m.entries)) + "Press Ctrl+L again to confirm.")
+			m.confirmAction = "clear"
+			return nil
+		}
+		m.confirmed = false
+		m.confirmAction = ""
 		m.entries = nil
+		m.messages = nil
 		m.render()
 		return nil
 
 	case "home":
+		if m.ta.Focused() {
+			m.ta.SetCursor(0)
+			return nil
+		}
 		m.vp.GotoTop()
 		return nil
 	case "end":
+		if m.ta.Focused() {
+			m.ta.SetCursor(len(m.ta.Value()))
+			return nil
+		}
 		m.vp.GotoBottom()
 		return nil
 
-	case "j":
+	case "pgup":
 		if !m.ta.Focused() {
-			m.vp.LineDown(1)
+			m.vp.HalfViewUp()
 			return nil
 		}
-	case "k":
+	case "pgdown":
 		if !m.ta.Focused() {
-			m.vp.LineUp(1)
+			m.vp.HalfViewDown()
 			return nil
 		}
+
+	case " ":
+		if !m.ta.Focused() {
+			m.scrollLocked = !m.scrollLocked
+			if m.scrollLocked {
+				m.toastNow("Scroll locked - press Space to follow")
+			} else {
+				m.vp.GotoBottom()
+				m.toastNow("Following output")
+			}
+			return nil
+		}
+
 	case "g", "G":
 		if !m.ta.Focused() {
 			m.vp.GotoBottom()
+			m.scrollLocked = false
 			return nil
 		}
 
@@ -187,6 +278,10 @@ func (m *model) onKey(msg tea.KeyMsg) tea.Cmd {
 			m.toggleReasoning()
 			return nil
 		}
+	case "u":
+		if !m.ta.Focused() {
+			return m.undoLast()
+		}
 	case "y":
 		if !m.ta.Focused() {
 			return m.yankCodeBlock()
@@ -197,11 +292,74 @@ func (m *model) onKey(msg tea.KeyMsg) tea.Cmd {
 		}
 	}
 
+	if !m.ta.Focused() && len(msg.String()) == 2 {
+		switch {
+		case msg.String()[0] == 'y' && msg.String()[1] >= '1' && msg.String()[1] <= '9':
+			return m.copyBlock(int(msg.String()[1] - '1'))
+		case msg.String()[0] == 's' && msg.String()[1] >= '1' && msg.String()[1] <= '9':
+			return m.saveBlock(int(msg.String()[1] - '1'))
+		}
+	}
+
 	if !m.ta.Focused() {
 		m.ta.Focus()
 	}
 	m.ta, _ = m.ta.Update(msg)
 	return nil
+}
+
+func (m *model) maybeSlashComplete() {
+	val := m.ta.Value()
+	if strings.HasPrefix(val, "/") && !strings.Contains(val, " ") {
+		m.refreshSlashDropdown(val)
+		m.dd.setOpen(len(m.dd.filtered) > 0)
+		return
+	}
+	if m.dd.kind == ddSlash {
+		m.dd.setOpen(false)
+	}
+}
+
+func (m *model) refreshSlashDropdown(query string) {
+	all := []ddItem{
+		{label: "/clear", desc: "Clear conversation", value: "/clear"},
+		{label: "/copy", desc: "Copy entire transcript", value: "/copy"},
+		{label: "/cost", desc: "Show session cost & tokens", value: "/cost"},
+		{label: "/export", desc: "Save transcript to file", value: "/export"},
+		{label: "/help", desc: "Show help", value: "/help"},
+		{label: "/minimal", desc: "Toggle minimal mode", value: "/minimal"},
+		{label: "/model", desc: "Switch model", value: "/model"},
+		{label: "/new", desc: "Start a new session", value: "/new"},
+		{label: "/provider", desc: "Switch provider", value: "/provider"},
+		{label: "/search", desc: "Search conversation", value: "/search"},
+		{label: "/sessions", desc: "List & resume sessions", value: "/sessions"},
+		{label: "/stats", desc: "Session statistics", value: "/stats"},
+		{label: "/theme", desc: "Cycle color themes", value: "/theme"},
+		{label: "/think", desc: "Toggle reasoning display", value: "/think"},
+		{label: "/tips", desc: "Show usage tips", value: "/tips"},
+		{label: "/undo", desc: "Remove last exchange", value: "/undo"},
+		{label: "/wrap", desc: "Toggle word wrap", value: "/wrap"},
+	}
+	var filtered []ddItem
+	q := strings.ToLower(query)
+	for _, it := range all {
+		if strings.HasPrefix(strings.ToLower(it.label), q) {
+			filtered = append(filtered, it)
+		}
+	}
+	m.dd.kind = ddSlash
+	m.dd.items = all
+	m.dd.filtered = filtered
+	m.dd.title = "Commands"
+	if m.dd.cursor >= len(filtered) {
+		m.dd.cursor = 0
+	}
+}
+
+func (m *model) applySlashItem(value string) {
+	m.dd.setOpen(false)
+	m.ta.SetValue("")
+	m.slash(value)
 }
 
 func (m *model) findLastIdx(role string) int {
@@ -250,6 +408,29 @@ func (m *model) deleteMsg() tea.Cmd {
 	return nil
 }
 
+func (m *model) undoLast() tea.Cmd {
+	if len(m.entries) == 0 {
+		return nil
+	}
+	for i := len(m.entries) - 1; i >= 0; i-- {
+		if m.entries[i].role == "user" {
+			m.entries = m.entries[:i]
+			if len(m.messages) > 1 {
+				m.messages = m.messages[:len(m.messages)-2]
+			} else {
+				m.messages = nil
+			}
+			m.render()
+			m.toastNow("Last exchange undone")
+			return nil
+		}
+		if m.entries[i].role == "assistant" {
+			continue
+		}
+	}
+	return nil
+}
+
 func (m *model) copyMsg() tea.Cmd {
 	for i := len(m.entries) - 1; i >= 0; i-- {
 		if m.entries[i].role == "assistant" || m.entries[i].role == "user" {
@@ -257,7 +438,7 @@ func (m *model) copyMsg() tea.Cmd {
 			if err := clipboardWrite(content); err != nil {
 				m.addSys("Copy failed: " + err.Error())
 			} else {
-				m.addSys("Copied to clipboard.")
+				m.toastNow("Copied to clipboard")
 			}
 			return nil
 		}
@@ -272,26 +453,50 @@ func (m *model) slash(cmd string) tea.Cmd {
 		m.entries = nil
 		m.render()
 	case "/help":
-		m.addSys("━━━ Commands ━━━")
+		m.addSys("----- Commands -----")
 		m.addSys("/clear      Clear all messages")
+		m.addSys("/copy       Copy entire transcript")
 		m.addSys("/cost       Show session cost & tokens")
-		m.addSys("/model N    Switch model")
-		m.addSys("/think      Toggle reasoning display")
+		m.addSys("/export     Save transcript to file")
 		m.addSys("/help       Show this help")
+		m.addSys("/minimal    Toggle minimal mode")
+		m.addSys("/model      Switch model")
+		m.addSys("/new        Start a new session")
+		m.addSys("/provider   Switch provider")
+		m.addSys("/search     Search conversation")
+		m.addSys("/sessions   List & resume sessions")
+		m.addSys("/stats      Session statistics")
+		m.addSys("/theme      Cycle color themes")
+		m.addSys("/think      Toggle reasoning display")
+		m.addSys("/tips       Show usage tips")
+		m.addSys("/undo       Remove last exchange")
+		m.addSys("/wrap       Toggle word wrap")
 		m.addSys("")
-		m.addSys("━━━ Keys ━━━")
-		m.addSys("Enter      Send message")
-		m.addSys("Esc        Stop streaming")
-		m.addSys("Tab        Focus chat/input")
-		m.addSys("↑↓         Input history (when focused)")
-		m.addSys("j/k        Scroll chat (when unfocused)")
-		m.addSys("g/G        Scroll to top/bottom")
-		m.addSys("E          Edit last message")
-		m.addSys("R          Resend last message")
-		m.addSys("D          Delete last user message")
-		m.addSys("C          Copy last message")
-		m.addSys("Ctrl+L     Clear all")
-		m.addSys("Ctrl+C     Quit")
+		m.addSys("----- Keys -----")
+		m.addSys("Enter       Send message")
+		m.addSys("Shift+Enter New line")
+		m.addSys("Esc         Stop streaming")
+		m.addSys("Ctrl+K      Command palette")
+		m.addSys("Ctrl+M      Model dropdown")
+		m.addSys("Ctrl+P      Provider dropdown")
+		m.addSys("Ctrl+N      New session")
+		m.addSys("Ctrl+S      Save session")
+		m.addSys("Tab         Focus chat/input")
+		m.addSys("Up/Down     Input history (when focused)")
+		m.addSys("j/k         Scroll chat (when unfocused)")
+		m.addSys("Space       Toggle scroll lock")
+		m.addSys("g/G         Scroll to top/bottom")
+		m.addSys("PgUp/PgDn   Page scroll")
+		m.addSys("E           Edit last message")
+		m.addSys("R           Resend last message")
+		m.addSys("D           Delete last user message")
+		m.addSys("U           Undo last exchange")
+		m.addSys("C           Copy last message")
+		m.addSys("y / y1-9    Copy code block")
+		m.addSys("w / s1-9    Save code block")
+		m.addSys("T           Toggle reasoning")
+		m.addSys("Ctrl+L      Clear all")
+		m.addSys("Ctrl+C      Quit")
 	case "/cost":
 		m.addSys(fmt.Sprintf("Cost: $%.4f  |  Tokens: %d", m.cost, m.tok))
 	case "/model":
@@ -299,10 +504,46 @@ func (m *model) slash(cmd string) tea.Cmd {
 			m.modelName = p[1]
 			m.addSys("Switched to: " + p[1])
 		} else {
-			m.addSys("Current: " + m.modelName)
+			m.openDropdown(ddModel)
+		}
+	case "/provider":
+		if len(p) > 1 {
+			m.provName = p[1]
+			m.addSys("Switched to: " + p[1])
+		} else {
+			m.openDropdown(ddProvider)
 		}
 	case "/think":
-		m.addSys("Reasoning: " + m.t.fd.Render("always show"))
+		m.reasoningVisible = !m.reasoningVisible
+		m.addSys(fmt.Sprintf("Reasoning: %v", m.reasoningVisible))
+	case "/theme":
+		m.cycleTheme()
+	case "/minimal":
+		m.minimal = !m.minimal
+		m.addSys(fmt.Sprintf("Minimal mode: %v", m.minimal))
+	case "/wrap":
+		m.wrapEnabled = !m.wrapEnabled
+		m.addSys(fmt.Sprintf("Word wrap: %v", m.wrapEnabled))
+	case "/stats":
+		m.showStats()
+	case "/export":
+		return m.exportTranscript()
+	case "/copy":
+		return m.copyTranscript()
+	case "/search":
+		if len(p) > 1 {
+			m.searchChat(strings.Join(p[1:], " "))
+		} else {
+			m.addSys("Usage: /search <query>")
+		}
+	case "/sessions":
+		m.showSessions()
+	case "/new":
+		return m.newSession(false)
+	case "/undo":
+		return m.undoLast()
+	case "/tips":
+		m.showTips()
 	default:
 		m.addSys("Unknown: " + cmd + "  (try /help)")
 	}
@@ -316,12 +557,14 @@ func (m *model) submit(prompt string) tea.Cmd {
 	m.startTime = time.Now()
 	m.streaming = true
 	m.quitConfirm = false
-	m.stopCh = make(chan struct{})
+	m.stopOnce = &stopOnce{ch: make(chan struct{})}
+	m.stopCh = m.stopOnce.ch
 	m.sb.Reset()
 	m.rb.Reset()
 	m.render()
 	m.vp.GotoBottom()
 	m.atBottom = true
+	m.scrollLocked = false
 
 	conf := m.cfg.GetConfig()
 	pName, modelName := m.rtr.Route(prompt, conf.Providers)
@@ -391,7 +634,7 @@ func (m *model) submit(prompt string) tea.Cmd {
 
 	ch := make(chan chunk, 100)
 	m.streamCh = ch
-	stop := m.stopCh
+	stop := m.stopOnce
 
 	go m.streamWorker(ch, stop, req, p)
 
@@ -405,7 +648,7 @@ func (m *model) yankCodeBlock() tea.Cmd {
 			if err != nil {
 				m.addSys("Copy: " + err.Error())
 			} else if lang != "" {
-				m.addSys("Copied " + lang + " code to clipboard.")
+				m.toastNow("Copied " + lang + " code")
 			}
 			return nil
 		}
@@ -420,7 +663,7 @@ func (m *model) writeCodeBlock() tea.Cmd {
 			if err != nil {
 				m.addSys("Save: " + err.Error())
 			} else {
-				m.addSys("Created " + path)
+				m.toastNow("Created " + path)
 			}
 			return nil
 		}
@@ -436,16 +679,19 @@ func (m *model) toggleReasoning() {
 			return
 		}
 	}
+	m.reasoningVisible = !m.reasoningVisible
+	m.addSys(fmt.Sprintf("Reasoning display: %v", m.reasoningVisible))
 }
 
 func (m *model) cancelStream() {
 	m.streaming = false
 	m.statusText = "Cancelled"
 	m.ta.Focus()
-	if m.stopCh != nil {
-		close(m.stopCh)
-		m.stopCh = nil
+	if m.stopOnce != nil {
+		m.stopOnce.close()
+		m.stopOnce = nil
 	}
+	m.stopCh = nil
 	m.render()
 }
 

@@ -4,8 +4,10 @@ import (
 	"fmt"
 	"strings"
 
+	"github.com/DevAnimecx/deltacode/internal/autonomous"
 	"github.com/DevAnimecx/deltacode/internal/config"
 	"github.com/DevAnimecx/deltacode/internal/context"
+	"github.com/DevAnimecx/deltacode/internal/intelligence"
 	"github.com/DevAnimecx/deltacode/internal/memory"
 	"github.com/DevAnimecx/deltacode/internal/provider"
 	"github.com/DevAnimecx/deltacode/internal/router"
@@ -14,13 +16,16 @@ import (
 )
 
 type Engine struct {
-	cfg       *config.Manager
-	context   *context.Engine
-	mem       *memory.ProjectMemory
-	vector    *memory.VectorMemory
-	skills    *skill.Engine
-	router    *router.Router
-	sessionID int64
+	cfg        *config.Manager
+	context    *context.Engine
+	mem        *memory.ProjectMemory
+	vector     *memory.VectorMemory
+	skills     *skill.Engine
+	intelMem   *intelligence.Memory
+	skillEng   *intelligence.SkillEngine
+	router     *router.Router
+	autoEngine *autonomous.Engine
+	sessionID  int64
 }
 
 func New(cfg *config.Manager) *Engine {
@@ -41,8 +46,12 @@ func New(cfg *config.Manager) *Engine {
 		e.skills = s
 	}
 
+	e.intelMem = intelligence.NewMemory()
+	e.skillEng = intelligence.NewSkillEngine()
+
 	conf := cfg.GetConfig()
 	e.router = router.NewRouter(conf.DefaultProvider, conf.DefaultModel)
+	e.autoEngine = autonomous.NewEngine(cfg)
 
 	return e
 }

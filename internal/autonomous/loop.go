@@ -1,116 +1,305 @@
 package autonomous
 
 import (
+	"encoding/json"
 	"fmt"
 	"os"
 	"os/exec"
+	"path/filepath"
 	"strings"
+	"time"
 
-	"github.com/DevAnimecx/deltacode/internal/context"
+	"github.com/DevAnimecx/deltacode/internal/config"
+	ctxeng "github.com/DevAnimecx/deltacode/internal/context"
+	"github.com/DevAnimecx/deltacode/internal/intelligence"
 	"github.com/DevAnimecx/deltacode/internal/provider"
+	"github.com/DevAnimecx/deltacode/internal/repository"
+	"github.com/DevAnimecx/deltacode/internal/tools"
 	"github.com/DevAnimecx/deltacode/pkg/models"
 )
 
-type Loop struct {
-	provider    models.ProviderConfig
-	model       string
-	context     *context.Engine
-	maxIter     int
-	sandboxDir  string
+type Task struct {
+	ID          string   `json:"id"`
+	Description string   `json:"description"`
+	DependsOn   []string `json:"depends_on"`
+	Tool        string   `json:"tool"`
+	Model       string   `json:"model,omitempty"`
+	File        string   `json:"file,omitempty"`
+	Status      string   `json:"status"`
+	Result      string   `json:"result,omitempty"`
+	Error       string   `json:"error,omitempty"`
+	Attempts    int      `json:"attempts"`
+	OutputFile  string   `json:"output_file,omitempty"`
 }
 
-func NewLoop(prov models.ProviderConfig, model string, maxIter int) *Loop {
-	ctxEng, _ := context.NewEngine()
-	sandbox, _ := os.MkdirTemp("", "delta-autonomous-*")
-	return &Loop{
-		provider:   prov,
-		model:      model,
-		context:    ctxEng,
-		maxIter:    maxIter,
-		sandboxDir: sandbox,
-	}
+type Plan struct {
+	Goal        string `json:"goal"`
+	Tasks       []Task `json:"tasks"`
+	Model       string `json:"model"`
+	Provider    string `json:"provider"`
+	CreatedAt   time.Time `json:"created_at"`
 }
 
-func (l *Loop) Execute(task string) error {
-	fmt.Printf("Δ Autonomous Loop — %s\n", task)
-	fmt.Println(strings.Repeat("─", 50))
+type Engine struct {
+	cfg        *config.Manager
+	provider   models.ProviderConfig
+	model      string
+	ctxEng     *ctxeng.Engine
+	mem        *intelligence.Memory
+	skills     *intelligence.SkillEngine
+	toolReg    *tools.Registry
+	repo       *repository.Analyzer
+	maxRetries int
+	sessionDir string
+}
 
-	p, err := provider.NewProvider(l.provider)
+func NewEngine(cfg *config.Manager) *Engine {
+	conf := cfg.GetConfig()
+	provCfg, _ := cfg.GetProvider(conf.DefaultProvider)
+
+	e := &Engine{
+		cfg:        cfg,
+		model:      conf.DefaultModel,
+		maxRetries: 3,
+	}
+	if provCfg != nil {
+		e.provider = *provCfg
+	}
+	e.ctxEng, _ = ctxeng.NewEngine()
+	e.mem = intelligence.NewMemory()
+	e.skills = intelligence.NewSkillEngine()
+	e.toolReg = tools.NewRegistry()
+	e.repo = repository.NewAnalyzer(".")
+	e.sessionDir, _ = os.MkdirTemp("", "delta-session-*")
+	return e
+}
+
+func (e *Engine) Execute(goal string) error {
+	fmt.Printf("\n  Δ Autonomous Engine\n")
+	fmt.Printf("  %s\n", strings.Repeat("━", 50))
+	fmt.Printf("  Goal: %s\n", goal)
+	fmt.Printf("  Provider: %s | Model: %s\n", e.provider.Name, e.model)
+	fmt.Printf("  %s\n\n", strings.Repeat("━", 50))
+
+	p, err := provider.NewProvider(e.provider)
 	if err != nil {
-		return err
+		return fmt.Errorf("provider error: %w", err)
 	}
 
-	// Phase 1: Plan
-	fmt.Println("Phase 1/5: Planning...")
-	plan, err := l.plan(p, task)
-	if err != nil {
-		return err
-	}
-	fmt.Printf("  Plan: %s\n", truncate(plan, 200))
-
-	// Phase 2: Write
-	fmt.Println("Phase 2/5: Writing code...")
-	code, err := l.write(p, task, plan)
-	if err != nil {
-		return err
-	}
-	fmt.Printf("  Generated %d bytes\n", len(code))
-
-	// Phase 3: Run
-	fmt.Println("Phase 3/5: Running...")
-	runResult := l.runCode(code)
-	fmt.Printf("  Exit: %d\n", runResult.exitCode)
-	if runResult.stdout != "" {
-		fmt.Printf("  Output: %s\n", truncate(runResult.stdout, 300))
-	}
-	if runResult.stderr != "" {
-		fmt.Printf("  Errors: %s\n", truncate(runResult.stderr, 300))
-	}
-
-	// Phase 4: Fix loop
-	iteration := 0
-	for runResult.exitCode != 0 && iteration < l.maxIter {
-		iteration++
-		fmt.Printf("Phase 4/5: Fixing (iteration %d)...\n", iteration)
-		code, err = l.fix(p, task, code, runResult)
-		if err != nil {
-			return err
+	repoInfo := e.repo.Analyze()
+	if repoInfo.ProjectType != "" {
+		fmt.Printf("  📁 %s project detected (%d files)\n", repoInfo.ProjectType, repoInfo.FileCount)
+		if len(repoInfo.EntryPoints) > 0 {
+			fmt.Printf("  📍 Entry: %s\n", repoInfo.EntryPoints[0])
 		}
-		runResult = l.runCode(code)
-		fmt.Printf("  Exit: %d\n", runResult.exitCode)
 	}
 
-	// Phase 5: Commit
-	fmt.Println("Phase 5/5: Committing...")
-	l.commit(code, task)
+	matches := e.skills.Find(goal)
+	if len(matches) > 0 && matches[0].UsageCount > 2 {
+		fmt.Printf("  ⚡ Using cached skill: %s\n", matches[0].Name)
+		fmt.Printf("  %s\n\n", matches[0].Output)
+		return nil
+	}
 
-	fmt.Println(strings.Repeat("─", 50))
-	fmt.Println("✓ Autonomous task complete")
+	fmt.Print("  Phase 1/6: Planning")
+	plan, err := e.buildPlan(p, goal, repoInfo)
+	if err != nil {
+		return fmt.Errorf("planning failed: %w", err)
+	}
+	fmt.Printf(" — %d tasks\n", len(plan.Tasks))
+
+	for i, task := range plan.Tasks {
+		fmt.Printf("  Phase 2-4/6: Task %d/%d: %s\n", i+1, len(plan.Tasks), task.Description)
+
+		var result string
+		var execErr error
+		for attempt := 0; attempt <= e.maxRetries; attempt++ {
+			if attempt > 0 {
+				fmt.Printf("    Retry %d/%d\n", attempt, e.maxRetries)
+			}
+			result, execErr = e.executeTask(p, &task, plan)
+			if execErr == nil {
+				task.Status = "done"
+				task.Result = result
+				task.Attempts = attempt
+				break
+			}
+			if attempt < e.maxRetries {
+				result, execErr = e.fixExecution(p, goal, task.Description, result, execErr)
+			}
+		}
+
+		if execErr != nil {
+			fmt.Printf("    ✗ Failed after %d attempts: %s\n", task.Attempts+1, execErr)
+			task.Status = "failed"
+			task.Error = execErr.Error()
+		} else {
+			task.Status = "done"
+			task.Result = result
+			fmt.Printf("    ✓ Completed\n")
+		}
+		plan.Tasks[i] = task
+	}
+
+	fmt.Print("  Phase 5/6: Validation")
+	valid := e.validate(plan)
+	if valid {
+		fmt.Println(" — ✓ All checks passed")
+	} else {
+		fmt.Println(" — ⚠ Some checks incomplete")
+	}
+
+	fmt.Print("  Phase 6/6: Learning")
+	e.skills.Learn(goal, plan)
+	e.mem.Store("workflow", "global", goal, fmt.Sprintf("plan:%s", plan.Model))
+	fmt.Println(" — ✓ Saved")
+
+	e.cleanup()
+	fmt.Printf("\n  %s\n", strings.Repeat("━", 50))
+	fmt.Printf("  ✓ Autonomous session complete\n")
 	return nil
 }
 
-func (l *Loop) plan(p provider.Provider, task string) (string, error) {
+func (e *Engine) buildPlan(p provider.Provider, goal string, repo *repository.ProjectInfo) (*Plan, error) {
+	sysPrompt := fmt.Sprintf(`You are a software architect. Analyze the goal and create an execution plan.
+
+Project context:
+- Type: %s
+- Languages: %v
+- Files: %d
+- Entry points: %v
+
+Return a JSON plan with this structure:
+{"tasks":[{"id":"1","description":"what to do","depends_on":[],"tool":"write","file":"path/to/file"}]}
+Keep tasks small, ordered, and dependency-aware. Use tools: read, write, edit, delete, exec, search.`, repo.ProjectType, repo.Languages, repo.FileCount, repo.EntryPoints)
+
 	resp, err := p.Chat(models.ChatRequest{
-		Model: l.model,
+		Model: e.model,
 		Messages: []models.Message{
-			{Role: models.RoleSystem, Content: "You are a software architect. Create a brief implementation plan. List files and key changes. Be concise."},
-			{Role: models.RoleUser, Content: task},
+			{Role: models.RoleSystem, Content: sysPrompt},
+			{Role: models.RoleUser, Content: goal},
 		},
-		Temperature: 0.3,
+		Temperature: 0.2,
+		MaxTokens:   4096,
 	})
 	if err != nil {
-		return "", err
+		return &Plan{Goal: goal, Model: e.model, Provider: e.provider.Name, CreatedAt: time.Now()}, nil
 	}
-	return resp.Message.Content, nil
+
+	plan := &Plan{
+		Goal:      goal,
+		Model:     e.model,
+		Provider:  e.provider.Name,
+		CreatedAt: time.Now(),
+	}
+	if !strings.Contains(resp.Message.Content, "tasks") {
+		plan.Tasks = []Task{{
+			ID: "1", Description: goal,
+			DependsOn: []string{}, Tool: "write", Status: "pending",
+		}}
+		return plan, nil
+	}
+
+	if err := json.Unmarshal([]byte(resp.Message.Content), plan); err != nil {
+		plan.Tasks = []Task{{
+			ID: "1", Description: goal,
+			DependsOn: []string{}, Tool: "write", Status: "pending",
+		}}
+	}
+	for i := range plan.Tasks {
+		if plan.Tasks[i].ID == "" {
+			plan.Tasks[i].ID = fmt.Sprintf("%d", i+1)
+		}
+		if plan.Tasks[i].Status == "" {
+			plan.Tasks[i].Status = "pending"
+		}
+	}
+	return plan, nil
 }
 
-func (l *Loop) write(p provider.Provider, task, plan string) (string, error) {
-	fullPrompt := fmt.Sprintf("Task: %s\n\nPlan:\n%s\n\nWrite the complete code. Return ONLY the code, no explanation.", task, plan)
+func (e *Engine) executeTask(p provider.Provider, task *Task, plan *Plan) (string, error) {
+	switch task.Tool {
+	case "read":
+		return e.toolReg.Call("read", task.File)
+	case "write":
+		resp, err := p.Chat(models.ChatRequest{
+			Model: e.model,
+			Messages: []models.Message{
+				{Role: models.RoleSystem, Content: "You are an expert engineer. Write production-ready code. Return ONLY the code in a single code block."},
+				{Role: models.RoleUser, Content: fmt.Sprintf("Goal: %s\n\nTask: %s\n\nWrite the complete implementation.", plan.Goal, task.Description)},
+			},
+			Temperature: 0.3,
+			MaxTokens:   16384,
+		})
+		if err != nil {
+			return "", err
+		}
+		code := resp.Message.Content
+		if task.File != "" {
+			dir := filepath.Dir(task.File)
+			if dir != "." {
+				os.MkdirAll(dir, 0755)
+			}
+			extracted := extractCode(code)
+			os.WriteFile(task.File, []byte(extracted), 0644)
+		}
+		return code, nil
+
+	case "edit":
+		resp, err := p.Chat(models.ChatRequest{
+			Model: e.model,
+			Messages: []models.Message{
+				{Role: models.RoleSystem, Content: "Return the complete updated file content in a code block."},
+				{Role: models.RoleUser, Content: task.Description},
+			},
+			Temperature: 0.3,
+		})
+		if err != nil {
+			return "", err
+		}
+		if task.File != "" {
+			code := extractCode(resp.Message.Content)
+			os.WriteFile(task.File, []byte(code), 0644)
+		}
+		return resp.Message.Content, nil
+
+	case "exec":
+		return e.toolReg.Call("exec", task.Description)
+
+	case "search":
+		return e.toolReg.Call("search", task.Description)
+
+	case "delete":
+		if task.File != "" {
+			if err := os.Remove(task.File); err != nil {
+				return "", err
+			}
+			return "Deleted " + task.File, nil
+		}
+		return "", fmt.Errorf("no file specified")
+
+	default:
+		resp, err := p.Chat(models.ChatRequest{
+			Model: e.model,
+			Messages: []models.Message{
+				{Role: models.RoleSystem, Content: "You are an expert engineer."},
+				{Role: models.RoleUser, Content: fmt.Sprintf("Goal: %s\n\nTask: %s\n\nExecute and return the result.", plan.Goal, task.Description)},
+			},
+			Temperature: 0.3,
+		})
+		if err != nil {
+			return "", err
+		}
+		return resp.Message.Content, nil
+	}
+}
+
+func (e *Engine) fixExecution(p provider.Provider, goal, desc, prevResult string, execErr error) (string, error) {
 	resp, err := p.Chat(models.ChatRequest{
-		Model: l.model,
+		Model: e.model,
 		Messages: []models.Message{
-			{Role: models.RoleSystem, Content: "You are an expert engineer. Write production-ready code. Return ONLY code blocks."},
-			{Role: models.RoleUser, Content: fullPrompt},
+			{Role: models.RoleSystem, Content: "You are a debugger. Fix the issue and return the corrected code."},
+			{Role: models.RoleUser, Content: fmt.Sprintf("Goal: %s\nTask: %s\n\nError: %s\n\nPrevious result:\n%s\n\nReturn the fixed version.", goal, desc, execErr, prevResult)},
 		},
 		Temperature: 0.3,
 		MaxTokens:   16384,
@@ -121,48 +310,29 @@ func (l *Loop) write(p provider.Provider, task, plan string) (string, error) {
 	return resp.Message.Content, nil
 }
 
-func (l *Loop) fix(p provider.Provider, task, code string, result *runResult) (string, error) {
-	prompt := fmt.Sprintf(`Task: %s
-
-Previous code:
-%s
-
-Execution failed:
-Exit code: %d
-Stdout: %s
-Stderr: %s
-
-Fix the code and return the corrected version. Return ONLY the fixed code.`,
-		task, code, result.exitCode, result.stdout, result.stderr)
-
-	resp, err := p.Chat(models.ChatRequest{
-		Model: l.model,
-		Messages: []models.Message{
-			{Role: models.RoleSystem, Content: "You are a debugger. Fix the code and return ONLY the fixed code."},
-			{Role: models.RoleUser, Content: prompt},
-		},
-		Temperature: 0.3,
-		MaxTokens:   16384,
-	})
-	if err != nil {
-		return "", err
+func (e *Engine) validate(plan *Plan) bool {
+	for _, task := range plan.Tasks {
+		if task.Status != "done" {
+			return false
+		}
+		if task.File != "" {
+			if _, err := os.Stat(task.File); os.IsNotExist(err) {
+				return false
+			}
+		}
 	}
-	return resp.Message.Content, nil
+	return true
 }
 
-type runResult struct {
-	exitCode int
-	stdout   string
-	stderr   string
+func (e *Engine) cleanup() {
+	os.RemoveAll(e.sessionDir)
 }
 
-func (l *Loop) runCode(code string) *runResult {
+func (e *Engine) RunCode(code string) (string, int) {
 	extracted := extractCode(code)
-	tmpFile := l.sandboxDir + "\\script.py"
+	tmpFile := filepath.Join(e.sessionDir, "script.py")
 	os.WriteFile(tmpFile, []byte(extracted), 0644)
-
 	cmd := exec.Command("python", tmpFile)
-	cmd.Dir = l.sandboxDir
 	output, err := cmd.CombinedOutput()
 	exitCode := 0
 	if err != nil {
@@ -172,44 +342,25 @@ func (l *Loop) runCode(code string) *runResult {
 			exitCode = -1
 		}
 	}
-
-	return &runResult{
-		exitCode: exitCode,
-		stdout:   string(output),
-		stderr:   "",
-	}
-}
-
-func (l *Loop) commit(code, task string) {
-	msg := fmt.Sprintf("Delta Auto: %s", truncate(task, 60))
-	tmpFile := l.sandboxDir + "\\output.txt"
-	os.WriteFile(tmpFile, []byte(code), 0644)
-	exec.Command("git", "add", tmpFile).Run()
-	exec.Command("git", "commit", "-m", msg).Run()
-	fmt.Printf("  Committed: %s\n", msg)
-}
-
-func (l *Loop) Cleanup() {
-	os.RemoveAll(l.sandboxDir)
+	return string(output), exitCode
 }
 
 func extractCode(text string) string {
 	if strings.Contains(text, "```") {
 		parts := strings.Split(text, "```")
 		for i, part := range parts {
-			if i%2 == 1 && !strings.HasPrefix(part, "python") && !strings.HasPrefix(part, "\npython") {
-				continue
-			}
 			if i%2 == 1 {
 				code := strings.TrimSpace(part)
 				if idx := strings.Index(code, "\n"); idx != -1 {
 					code = code[idx+1:]
 				}
-				return code
+				if code != "" {
+					return strings.TrimSpace(code)
+				}
 			}
 		}
 	}
-	return text
+	return strings.TrimSpace(text)
 }
 
 func truncate(s string, max int) string {
@@ -219,3 +370,4 @@ func truncate(s string, max int) string {
 	}
 	return string(runes[:max]) + "..."
 }
+

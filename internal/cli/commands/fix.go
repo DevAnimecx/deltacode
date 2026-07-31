@@ -23,17 +23,8 @@ func newFixCmd(cfg *config.Manager) *cobra.Command {
 }
 
 func runFix(cfg *config.Manager, task string) {
-	conf := cfg.GetConfig()
-	provCfg, err := cfg.GetProvider(conf.DefaultProvider)
-	if err != nil {
-		fmt.Fprintf(os.Stderr, "Error: %v\n", err)
-		return
-	}
-
-	loop := autonomous.NewLoop(*provCfg, conf.DefaultModel, 3)
-	defer loop.Cleanup()
-
-	if err := loop.Execute("fix: " + task); err != nil {
+	e := autonomous.NewEngine(cfg)
+	if err := e.Execute("fix: " + task); err != nil {
 		fmt.Fprintf(os.Stderr, "Error: %v\n", err)
 	}
 }
