@@ -171,10 +171,17 @@ func (m *model) executePlan(p *planning.Plan) tea.Cmd {
 			prompt += "\n\n" + m.renderPlanCard(p)
 
 			_ = m.submit(prompt)
-			_ = m.nextChunk()
 
-			for m.streaming {
-				time.Sleep(100 * time.Millisecond)
+			for {
+				c, open := <-m.streamCh
+				if !open {
+					m.Update(chunk{done: true})
+					break
+				}
+				m.Update(c)
+				if c.done {
+					break
+				}
 			}
 
 			if m.lastError != nil {

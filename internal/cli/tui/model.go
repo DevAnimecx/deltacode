@@ -398,7 +398,7 @@ func (m *model) splash() {
 	} {
 		m.entries = append(m.entries, entry{role: "system", content: m.t.logo.Render(s)})
 	}
-	m.addSys("v0.2.6  |  Model: " + m.modelName + "  |  Provider: " + m.provName)
+	m.addSys("v0.2.7  |  Model: " + m.modelName + "  |  Provider: " + m.provName)
 	if m.sessionTitle != "" {
 		m.addSys("Session: " + m.sessionTitle)
 	}

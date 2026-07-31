@@ -717,6 +717,7 @@ func (m *model) slash(cmd string) tea.Cmd {
 			return nil
 		}
 		m.currentPlan = m.planGoal(goal)
+		m.planPending = true
 		m.addSys(m.renderPlanCard(m.currentPlan))
 		m.addSys("")
 		m.addSys("Press Enter to approve and execute plan")

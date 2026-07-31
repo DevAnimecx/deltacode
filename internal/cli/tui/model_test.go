@@ -12,6 +12,7 @@ import (
 	"time"
 
 	"github.com/DevAnimecx/deltacode/internal/config"
+	"github.com/DevAnimecx/deltacode/internal/planning"
 	"github.com/DevAnimecx/deltacode/internal/router"
 	"github.com/DevAnimecx/deltacode/pkg/models"
 	"github.com/charmbracelet/bubbles/spinner"
@@ -425,6 +426,181 @@ func TestLiveGatewaySend(t *testing.T) {
 	last := lastEntry(m, "assistant")
 	if last == nil || last.content != got {
 		t.Fatalf("assistant entry mismatch: %+v", last)
+	}
+}
+
+func TestParseIntentClassifiesGoals(t *testing.T) {
+	cfg := testCfg(t, "http://127.0.0.1:1")
+	m := testModel(t, cfg)
+
+	cases := []struct {
+		prompt string
+		want   IntentType
+	}{
+		{"build a login page with auth and database", IntentBuild},
+		{"fix the broken api endpoint returning errors", IntentFix},
+		{"refactor the code to clean it up", IntentRefactor},
+		{"explain what this component does", IntentExplain},
+		{"write unit tests for the service", IntentTest},
+	}
+	for _, c := range cases {
+		got := m.parseIntent(c.prompt)
+		if got.Type != c.want {
+			t.Errorf("parseIntent(%q) type = %s, want %s", c.prompt, got.Type, c.want)
+		}
+	}
+
+	short := m.parseIntent("hi")
+	if short.Complexity != ComplexityLow {
+		t.Errorf("short prompt complexity = %s, want low", short.Complexity)
+	}
+	long := m.parseIntent("please build a very large feature that touches many files across the entire codebase and requires extensive backend work and frontend work and database migrations and authentication and caching and rate limiting and comprehensive tests and full documentation and multiple review iterations before it is ready to ship")
+	if long.Complexity != ComplexityHigh {
+		t.Errorf("long prompt complexity = %s, want high", long.Complexity)
+	}
+	if long.EstimatedTokens <= 0 || long.EstimatedCost <= 0 {
+		t.Fatalf("expected positive token/cost estimates, got tokens=%d cost=%.5f", long.EstimatedTokens, long.EstimatedCost)
+	}
+}
+
+func TestPlanGoalBuildsTaskGraphPerIntent(t *testing.T) {
+	cfg := testCfg(t, "http://127.0.0.1:1")
+	m := testModel(t, cfg)
+
+	p := m.planGoal("build a new authentication system")
+	if p == nil || len(p.Tasks) == 0 {
+		t.Fatal("build plan produced no tasks")
+	}
+	if len(p.Tasks) != 5 {
+		t.Fatalf("build tasks = %d, want 5 (schema, api, ui, tests, docs)", len(p.Tasks))
+	}
+	if _, ok := p.GetTask("3"); !ok {
+		t.Fatal("build plan missing frontend task 3")
+	}
+
+	f := m.planGoal("fix the checkout crash on submit")
+	if len(f.Tasks) != 4 {
+		t.Fatalf("fix tasks = %d, want 4 (reproduce, root cause, fix, validate)", len(f.Tasks))
+	}
+
+	r := m.planGoal("refactor the payment module")
+	if len(r.Tasks) != 3 {
+		t.Fatalf("refactor tasks = %d, want 3", len(r.Tasks))
+	}
+
+	tst := m.planGoal("add tests for the billing service")
+	if len(tst.Tasks) != 3 {
+		t.Fatalf("test tasks = %d, want 3", len(tst.Tasks))
+	}
+
+	// Dependencies must form a DAG: task 4 depends on 2 and 3.
+	b2, ok2 := p.GetTask("2")
+	if !ok2 || len(b2.DependsOn) != 1 || b2.DependsOn[0] != "1" {
+		t.Fatalf("task 2 deps = %v, want [1]", b2.DependsOn)
+	}
+	b4, ok4 := p.GetTask("4")
+	if !ok4 || len(b4.DependsOn) != 2 {
+		t.Fatalf("task 4 deps = %v, want 2", b4.DependsOn)
+	}
+}
+
+func TestPlanExecutionRunsTasksSequentially(t *testing.T) {
+	url, _ := fakeSSE(t, []string{"task done"})
+	cfg := testCfg(t, url)
+	m := testModel(t, cfg)
+
+	p := m.planGoal("fix a small bug")
+	if len(p.Tasks) != 4 {
+		t.Fatalf("tasks = %d, want 4", len(p.Tasks))
+	}
+
+	m.executePlan(p)
+
+	deadline := time.After(20 * time.Second)
+	for {
+		done, total := p.Progress()
+		if done == total && total > 0 {
+			break
+		}
+		select {
+		case <-deadline:
+			t.Fatalf("plan did not finish: progress %d/%d", done, total)
+		case <-time.After(100 * time.Millisecond):
+		}
+	}
+
+	first, _ := p.GetTask("1")
+	if first.Status != planning.StatusDone {
+		t.Fatalf("task 1 status = %s, want done", first.Status)
+	}
+	last, _ := p.GetTask("4")
+	if last.Status != planning.StatusDone {
+		t.Fatalf("task 4 status = %s, want done", last.Status)
+	}
+	if m.statusText != "Ready" {
+		t.Fatalf("statusText = %q, want Ready", m.statusText)
+	}
+	if m.streaming {
+		t.Fatal("still streaming after plan execution")
+	}
+}
+
+func TestSlashPlanShowsCardThenApproves(t *testing.T) {
+	url, _ := fakeSSE(t, []string{"ok"})
+	cfg := testCfg(t, url)
+	m := testModel(t, cfg)
+
+	// User sends a prompt first; /plan reuses the last prompt as the goal.
+	pump(t, m, "fix a small bug")
+	if m.lastPrompt != "fix a small bug" {
+		t.Fatalf("lastPrompt = %q, want %q", m.lastPrompt, "fix a small bug")
+	}
+
+	m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'/'}})
+	if !m.dd.visible() {
+		t.Fatal("slash dropdown should open")
+	}
+	for _, r := range "plan" {
+		m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{r}})
+	}
+	if len(m.dd.filtered) == 0 || m.dd.filtered[0].value != "/plan" {
+		t.Fatalf("filtered = %v, want [/plan]", m.dd.filtered)
+	}
+	m.Update(tea.KeyMsg{Type: tea.KeyEnter})
+
+	if m.currentPlan == nil {
+		t.Fatal("/plan should set currentPlan")
+	}
+	if !m.planPending {
+		t.Fatal("/plan should set planPending (waiting for approval)")
+	}
+
+	var cardFound bool
+	for _, e := range m.entries {
+		if e.role == "system" && strings.Contains(e.content, "PLAN") {
+			cardFound = true
+		}
+	}
+	if !cardFound {
+		t.Fatal("plan card not rendered into the transcript")
+	}
+
+	// User presses Enter to approve and execute.
+	m.Update(tea.KeyMsg{Type: tea.KeyEnter})
+	deadline := time.After(20 * time.Second)
+	for {
+		if m.currentPlan.AllDone() {
+			break
+		}
+		select {
+		case <-deadline:
+			done, total := m.currentPlan.Progress()
+			t.Fatalf("approved plan did not complete: %d/%d", done, total)
+		case <-time.After(100 * time.Millisecond):
+		}
+	}
+	if m.planPending {
+		t.Fatal("planPending should be cleared after approval")
 	}
 }
 

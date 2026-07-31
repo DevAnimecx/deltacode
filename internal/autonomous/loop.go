@@ -112,7 +112,7 @@ type Engine struct {
 	workDir    string
 	state      EngineState
 
-	// v0.2.6
+	// v0.2.7
 	orche   *orchestrator.Router
 	watch   *repointel.Watcher
 	workers int
