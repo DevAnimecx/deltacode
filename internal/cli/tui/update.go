@@ -2,6 +2,7 @@ package tui
 
 import (
 	"fmt"
+	"path/filepath"
 	"strings"
 	"time"
 
@@ -73,6 +74,10 @@ func (m *model) onKey(msg tea.KeyMsg) tea.Cmd {
 		}
 		if m.quitConfirm {
 			m.saveSession()
+			m.saveHistory()
+			m.addSys("")
+			m.addSys(m.sessionSummary())
+			m.addSys("Session saved. Goodbye.")
 			return tea.Quit
 		}
 		m.quitConfirm = true
@@ -108,6 +113,20 @@ func (m *model) onKey(msg tea.KeyMsg) tea.Cmd {
 		m.saveSession()
 		m.toastNow("Session saved")
 		return nil
+	case "ctrl+w":
+		if m.wsData == nil {
+			m.wsData = &workspace{project: m.projectName(), badge: "Ready"}
+			m.wsData.gitRefresh()
+		}
+		m.wsData.shown = !m.wsData.shown
+		m.wsData.gitRefresh()
+		if m.wsData.shown {
+			m.notify("workspace view opened")
+		}
+		return nil
+	case "ctrl+h":
+		m.helpShown = !m.helpShown
+		return nil
 	}
 
 	return m.onInputKey(msg)
@@ -126,6 +145,7 @@ func (m *model) onInputKey(msg tea.KeyMsg) tea.Cmd {
 		}
 		m.inputHistory = append(m.inputHistory, t)
 		m.historyIdx = -1
+		m.saveHistory()
 		m.ta.Reset()
 		if strings.HasPrefix(t, "/") {
 			m.dd.setOpen(false)
@@ -544,6 +564,23 @@ func (m *model) slash(cmd string) tea.Cmd {
 		return m.undoLast()
 	case "/tips":
 		m.showTips()
+	case "/workspace":
+		if m.wsData == nil {
+			m.wsData = &workspace{project: m.projectName(), badge: "Ready"}
+		}
+		m.wsData.shown = true
+		m.wsData.gitRefresh()
+	case "/keys":
+		m.helpShown = !m.helpShown
+	case "/summary":
+		m.addSys(m.sessionSummary())
+	case "/export-json":
+		path := filepath.Join(sessionsDir(), "export-"+time.Now().Format("20060102-150405")+".json")
+		if err := m.exportJSON(path); err != nil {
+			m.addErr(err.Error())
+		} else {
+			m.addSys("Exported JSON: " + path)
+		}
 	default:
 		m.addSys("Unknown: " + cmd + "  (try /help)")
 	}
@@ -557,6 +594,10 @@ func (m *model) submit(prompt string) tea.Cmd {
 	m.startTime = time.Now()
 	m.streaming = true
 	m.quitConfirm = false
+	m.exchanges++
+	m.ws().badge = "Generating"
+	m.ws().goal = prompt
+	m.notify("started: " + truncateStr(prompt, 48))
 	m.stopOnce = &stopOnce{ch: make(chan struct{})}
 	m.stopCh = m.stopOnce.ch
 	m.sb.Reset()

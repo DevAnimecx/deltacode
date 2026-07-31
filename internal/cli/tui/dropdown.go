@@ -23,7 +23,9 @@ func (m *model) openDropdown(kind dropdownKind) {
 			{label: "/copy", desc: "Copy entire transcript", value: "/copy"},
 			{label: "/cost", desc: "Show session cost & tokens", value: "/cost"},
 			{label: "/export", desc: "Save transcript to file", value: "/export"},
+			{label: "/export-json", desc: "Export transcript as JSON", value: "/export-json"},
 			{label: "/help", desc: "Show help", value: "/help"},
+			{label: "/keys", desc: "Keyboard shortcuts overlay", value: "/keys"},
 			{label: "/minimal", desc: "Toggle minimal mode", value: "/minimal"},
 			{label: "/model", desc: "Switch model", value: "/model"},
 			{label: "/new", desc: "Start a new session", value: "/new"},
@@ -31,10 +33,12 @@ func (m *model) openDropdown(kind dropdownKind) {
 			{label: "/search", desc: "Search conversation", value: "/search"},
 			{label: "/sessions", desc: "List & resume sessions", value: "/sessions"},
 			{label: "/stats", desc: "Session statistics", value: "/stats"},
+			{label: "/summary", desc: "Session summary report", value: "/summary"},
 			{label: "/theme", desc: "Cycle color themes", value: "/theme"},
 			{label: "/think", desc: "Toggle reasoning display", value: "/think"},
 			{label: "/tips", desc: "Show usage tips", value: "/tips"},
 			{label: "/undo", desc: "Remove last exchange", value: "/undo"},
+			{label: "/workspace", desc: "Open engineering workspace", value: "/workspace"},
 			{label: "/wrap", desc: "Toggle word wrap", value: "/wrap"},
 		}
 		m.applyFilter()
@@ -106,7 +110,7 @@ func (m *model) applyFilter() {
 	} else {
 		var filtered []ddItem
 		for _, it := range m.dd.items {
-			if strings.Contains(strings.ToLower(it.label), q) || strings.Contains(strings.ToLower(it.desc), q) {
+			if fuzzyContains(it.label, q) || fuzzyContains(it.desc, q) {
 				filtered = append(filtered, it)
 			}
 		}
@@ -115,6 +119,20 @@ func (m *model) applyFilter() {
 	if m.dd.cursor >= len(m.dd.filtered) {
 		m.dd.cursor = 0
 	}
+}
+
+// fuzzyContains reports whether the query chars appear in order in s.
+func fuzzyContains(s, q string) bool {
+	s = strings.ToLower(s)
+	i := 0
+	for _, r := range q {
+		idx := strings.IndexRune(s[i:], r)
+		if idx < 0 {
+			return false
+		}
+		i += idx + 1
+	}
+	return true
 }
 
 func (m *model) onDropdownKey(msg tea.KeyMsg) tea.Cmd {

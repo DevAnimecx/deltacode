@@ -63,6 +63,57 @@ const Max = 100
 	}
 }
 
+func TestRemoveSymbolsByFile(t *testing.T) {
+	idx := NewIndexer(".")
+	dir := t.TempDir()
+	code := "package foo\n\nfunc Add(a, b int) int { return a + b }\n\nfunc Caller() { Add(1, 2) }\n"
+	file := filepath.Join(dir, "lib.go")
+	if err := os.WriteFile(file, []byte(code), 0644); err != nil {
+		t.Fatal(err)
+	}
+	if err := idx.IndexFile(file); err != nil {
+		t.Fatal(err)
+	}
+	if len(idx.Graph().GetSymbolsByFile(file)) == 0 {
+		t.Fatal("expected symbols before removal")
+	}
+	var callerID string
+	for _, s := range idx.Graph().GetSymbolsByFile(file) {
+		if s.Name == "Caller" {
+			callerID = s.ID
+		}
+	}
+	if callerID == "" {
+		t.Fatal("Caller symbol not found")
+	}
+	if len(idx.Graph().GetCallees(callerID)) == 0 {
+		t.Fatal("expected a call edge before removal")
+	}
+
+	idx.Graph().RemoveSymbolsByFile(file)
+
+	if len(idx.Graph().GetSymbolsByFile(file)) != 0 {
+		t.Fatal("symbols not removed")
+	}
+	if len(idx.Graph().Lookup("Add")) != 0 {
+		t.Fatal("nameIndex not cleaned")
+	}
+	if len(idx.Graph().GetCallees(callerID)) != 0 {
+		t.Fatal("call edges not removed")
+	}
+	if idx.Graph().Count() != 0 {
+		t.Fatal("count not updated")
+	}
+
+	// Re-indexing the same file must restore symbols (incremental path).
+	if err := idx.IndexFile(file); err != nil {
+		t.Fatal(err)
+	}
+	if len(idx.Graph().GetSymbolsByFile(file)) == 0 {
+		t.Fatal("re-index after removal failed")
+	}
+}
+
 func TestDetectLanguage(t *testing.T) {
 	cases := map[string]Language{
 		"a.go":     LangGo,

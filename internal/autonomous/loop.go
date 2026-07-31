@@ -1,6 +1,7 @@
 package autonomous
 
 import (
+	"context"
 	"encoding/json"
 	"fmt"
 	"os"
@@ -13,10 +14,14 @@ import (
 	"github.com/DevAnimecx/deltacode/internal/agents"
 	"github.com/DevAnimecx/deltacode/internal/checkpoint"
 	ctxeng "github.com/DevAnimecx/deltacode/internal/context"
+	"github.com/DevAnimecx/deltacode/internal/continuation"
 	"github.com/DevAnimecx/deltacode/internal/critique"
+	"github.com/DevAnimecx/deltacode/internal/graph"
 	"github.com/DevAnimecx/deltacode/internal/intelligence"
+	"github.com/DevAnimecx/deltacode/internal/orchestrator"
 	"github.com/DevAnimecx/deltacode/internal/planning"
 	"github.com/DevAnimecx/deltacode/internal/provider"
+	"github.com/DevAnimecx/deltacode/internal/repointel"
 	"github.com/DevAnimecx/deltacode/internal/repository"
 	"github.com/DevAnimecx/deltacode/internal/router"
 	"github.com/DevAnimecx/deltacode/internal/symbols"
@@ -106,6 +111,21 @@ type Engine struct {
 	sessionDir string
 	workDir    string
 	state      EngineState
+
+	// v0.2.6
+	orche    *orchestrator.Router
+	watch    *repointel.Watcher
+	workers  int
+	goal     continuation.GoalStatus
+	eventsF  *os.File
+}
+
+// SetConcurrency configures the worker pool size (default 3).
+func (e *Engine) SetConcurrency(n int) {
+	if n < 1 {
+		n = 1
+	}
+	e.workers = n
 }
 
 func NewEngine(cfg *config.Manager) *Engine {
@@ -117,6 +137,7 @@ func NewEngine(cfg *config.Manager) *Engine {
 		model:      conf.DefaultModel,
 		maxRetries: 3,
 		workDir:    ".",
+		workers:    3,
 	}
 	if provCfg != nil {
 		e.provider = *provCfg
@@ -132,7 +153,39 @@ func NewEngine(cfg *config.Manager) *Engine {
 	e.checkpts = checkpoint.New(".")
 	e.rank = ctxeng.NewRanker(".", e.symbols.Graph(), e.mem)
 	e.sessionDir, _ = os.MkdirTemp("", "delta-session-*")
+	e.orche = orchestrator.NewRouter(cfg.ListProviders(), orchestrator.RouteBalanced, e.tele)
+	e.watch = repointel.NewWatcher(repointel.WatchConfig{
+		Root: ".", PollInterval: 5 * time.Second, Index: true,
+	})
+	e.watch.Start()
 	return e
+}
+
+// emitEvent writes a JSONL event for the TUI activity feed.
+func (e *Engine) emitEvent(kind, detail string, data map[string]any) {
+	if e.eventsF == nil {
+		home, err := os.UserHomeDir()
+		if err != nil {
+			return
+		}
+		dir := filepath.Join(home, ".delta", "session")
+		os.MkdirAll(dir, 0755)
+		e.eventsF, _ = os.OpenFile(filepath.Join(dir, "events.jsonl"), os.O_CREATE|os.O_APPEND|os.O_WRONLY, 0600)
+		if e.eventsF == nil {
+			return
+		}
+	}
+	ev := map[string]any{
+		"time": time.Now().Format(time.RFC3339), "kind": kind, "detail": detail,
+	}
+	for k, v := range data {
+		ev[k] = v
+	}
+	b, err := json.Marshal(ev)
+	if err != nil {
+		return
+	}
+	e.eventsF.Write(append(b, '\n'))
 }
 
 func (e *Engine) State() EngineState { return e.state.Snapshot() }
@@ -178,13 +231,15 @@ func (e *Engine) Execute(goal string) error {
 	e.state.log("understood project context")
 	fmt.Printf(" — %d context items\n", 1)
 
-	// Phase 2: World model — symbol index + architecture.
+	// Phase 2: World model — incremental symbol index (only changed files re-indexed).
 	e.phase(PhaseWorldModel)
 	fmt.Print("  Phase 2/6: World Model")
+	e.symbols = e.watch.Indexer()
 	e.symbols.IndexDirectory(".", nil)
 	symCount := e.symbols.Graph().Count()
 	e.state.log(fmt.Sprintf("indexed %d symbols", symCount))
-	fmt.Printf(" — %d symbols indexed\n", symCount)
+	e.emitEvent("indexing", fmt.Sprintf("%d symbols indexed", symCount), nil)
+	fmt.Printf(" — %d symbols indexed (incremental watcher running)\n", symCount)
 
 	// Phase 3: Decompose — planner agent builds the task graph.
 	e.phase(PhaseDecompose)
@@ -207,53 +262,78 @@ func (e *Engine) Execute(goal string) error {
 	}
 	fmt.Println()
 
-	// Phase 5: Execute — run each task with its agent, retry, validate.
+	// Phase 5: Execute — concurrent task graph with worker pool,
+	// continuation-based recovery, and a per-task quality gate.
 	e.phase(PhaseExecute)
-	replanned := map[string]bool{}
-	replanBudget := 8
-	for done := 0; done < len(plan.Tasks) || hasReady(plan); {
-		t, ok := plan.NextTask()
-		if !ok {
-			plan.MarkFailedTasksBlocked()
-			break
-		}
-		e.state.set(func(s *EngineState) {
-			s.TaskID = t.ID
-			s.Agent = t.Agent
-			s.TaskDone = done
-		})
-		fmt.Printf("  Task %s/%d: %s [%s]\n", t.ID, len(plan.Tasks), t.Title, t.Agent)
+	e.goal = continuation.GoalStatus{Goal: goal, TotalTasks: len(plan.Tasks), StartedAt: time.Now()}
 
-		plan.SetTaskStatus(t.ID, planning.StatusRunning, "", "")
+	g := graph.New()
+	for _, t := range plan.Tasks {
+		t := t
+		g.Add(&graph.Node{
+			ID:           t.ID,
+			Title:        t.Title,
+			Dependencies: t.DependsOn,
+			Run: func(ctx context.Context) (string, error) {
+				e.state.set(func(s *EngineState) { s.TaskID = t.ID; s.Agent = t.Agent })
+				fmt.Printf("  Task %s: %s [%s]\n", t.ID, t.Title, t.Agent)
+				plan.SetTaskStatus(t.ID, planning.StatusRunning, "", "")
+				e.emitEvent("task_start", t.ID, map[string]any{"title": t.Title, "agent": t.Agent})
 
-		var result string
-		var execErr error
-		connectivityErr := false
-		for attempt := 0; attempt <= e.maxRetries; attempt++ {
-			e.state.set(func(s *EngineState) { s.Attempts = attempt })
-			if attempt > 0 {
-				fmt.Printf("    ↻ Retry %d/%d\n", attempt, e.maxRetries)
-			}
-			result, execErr = e.executeTask(p, goal, t, plan, repoInfo)
-			if execErr == nil {
-				break
-			}
-			connectivityErr = isConnectivityError(execErr)
-			if connectivityErr {
-				break
-			}
-			if attempt < e.maxRetries {
+				var result string
+				var execErr error
+				cls := continuation.Classified{Class: continuation.ClassFatal, Retryable: false, MaxAttempts: 1}
+				attempts := 0
+				for {
+					result, execErr = e.executeTask(p, goal, t, plan, repoInfo)
+					e.goal.Attempts++
+					attempts++
+					if execErr == nil {
+						break
+					}
+					cls = continuation.Classify(execErr)
+					policy := continuation.PolicyFor(cls)
+					e.state.log(fmt.Sprintf("task %s failed (attempt %d): %s", t.ID, attempts, truncate(execErr.Error(), 120)))
+					e.emitEvent("retry", t.ID, map[string]any{"class": string(cls.Class), "attempt": attempts, "error": truncate(execErr.Error(), 200)})
+					if !policy.ShouldRetry(attempts - 1) {
+						break
+					}
+					e.goal.Retries++
+					wait := policy.WaitFor(attempts - 1)
+					fmt.Printf("    ↻ [%s] retry %d/%d in %s\n", cls.Class, attempts, cls.MaxAttempts, wait.Round(100*time.Millisecond))
+					select {
+					case <-ctx.Done():
+						return "", ctx.Err()
+					case <-time.After(wait):
+					}
+				}
+
+				if execErr == nil {
+					plan.SetTaskStatus(t.ID, planning.StatusDone, result, "")
+					e.goal.MarkTask(true)
+					e.emitEvent("task_done", t.ID, nil)
+					fmt.Printf("    ✓ Completed\n")
+					// Autonomous quality loop: validate -> improve -> re-test.
+					if q := e.qualityGate(p, goal, t, plan); len(q) > 0 {
+						for _, r := range q {
+							if !r.Passed {
+								e.emitEvent("validation_failed", t.ID, map[string]any{"check": r.String()})
+							}
+						}
+					}
+					return result, nil
+				}
+
+				// Continuation: classify and recover instead of stopping.
+				e.goal.MarkTask(false)
+				e.goal.Recoveries++
+				rec := continuation.PlanRecovery(t.ID, execErr, "", true)
 				plan.SetTaskStatus(t.ID, planning.StatusFailed, result, execErr.Error())
-			}
-		}
+				e.emitEvent("task_failed", t.ID, map[string]any{"class": string(rec.Class), "error": truncate(execErr.Error(), 200)})
+				fmt.Printf("    ✗ %s\n", truncate(execErr.Error(), 200))
+				fmt.Printf("    ↷ recovery: %s\n", rec.Advice[0])
 
-		if execErr != nil {
-			plan.SetTaskStatus(t.ID, planning.StatusFailed, result, execErr.Error())
-			if !connectivityErr && !replanned[t.ID] && replanBudget > 0 {
-				// Replan once per task: add a fix task reusing the failed
-				// task's dependencies so it becomes immediately ready.
-				replanned[t.ID] = true
-				replanBudget--
+				// Add a fix task so remaining dependencies still proceed.
 				plan.Replan([]planning.Task{{
 					Title:       "Fix: " + t.Title,
 					Description: "Fix the failure from task " + t.ID + ": " + execErr.Error() + "\nOriginal task: " + t.Description,
@@ -261,15 +341,19 @@ func (e *Engine) Execute(goal string) error {
 					Agent:       "Debugger",
 					Files:       t.Files,
 				}})
-			}
-			fmt.Printf("    ✗ Failed: %s\n", truncate(execErr.Error(), 200))
-		} else {
-			plan.SetTaskStatus(t.ID, planning.StatusDone, result, "")
-			done++
-			e.state.set(func(s *EngineState) { s.TaskDone = done })
-			fmt.Printf("    ✓ Completed\n")
-		}
+				return "", execErr
+			},
+		})
 	}
+
+	runCtx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	sum := g.Run(runCtx, e.workers)
+	e.goal.SkippedTasks = sum.Skipped
+	done := sum.Done
+	fmt.Printf("  — concurrent execution: %d done, %d failed, %d skipped (%d workers)\n",
+		sum.Done, sum.Failed, sum.Skipped, e.workers)
+	e.state.set(func(s *EngineState) { s.TaskDone = done })
 
 	// Validation gate.
 	e.state.log("running validation pipeline")
@@ -329,10 +413,26 @@ func (e *Engine) Execute(goal string) error {
 	fmt.Printf("  %s\n", strings.Repeat("─", 50))
 
 	e.cleanup()
+	if e.eventsF != nil {
+		e.eventsF.Close()
+		e.eventsF = nil
+	}
 	snap := e.state.Snapshot()
+	gs := e.goal
+	status := "✓ complete"
+	if gs.FailedTasks > 0 || gs.SkippedTasks > 0 {
+		status = "✓ complete with partial success"
+		gs.Partial = true
+	}
 	fmt.Printf("\n  %s\n", strings.Repeat("━", 50))
-	fmt.Printf("  ✓ Cognitive session complete (phase=%s tasks=%d/%d tokens=%d cost=$%.4f)\n",
-		snap.Phase, snap.TaskDone, snap.TaskCount, snap.TokensUsed, snap.Cost)
+	fmt.Printf("  %s (phase=%s tasks=%d/%d", status, snap.Phase, gs.CompletedTasks, gs.TotalTasks)
+	if gs.FailedTasks > 0 || gs.SkippedTasks > 0 {
+		fmt.Printf(" failed=%d skipped=%d", gs.FailedTasks, gs.SkippedTasks)
+	}
+	if gs.Retries > 0 {
+		fmt.Printf(" retries=%d recoveries=%d", gs.Retries, gs.Recoveries)
+	}
+	fmt.Printf(" tokens=%d cost=$%.4f elapsed=%s)\n", snap.TokensUsed, snap.Cost, time.Since(gs.StartedAt).Round(time.Second))
 	return nil
 }
 
@@ -582,22 +682,73 @@ func (e *Engine) executeTask(p provider.Provider, goal string, t planning.Task, 
 	return result.Output, nil
 }
 
+// qualityGate runs the validation loop on a completed task and feeds
+// failures back to the Debugger agent (max 2 improvement iterations).
+func (e *Engine) qualityGate(p provider.Provider, goal string, t planning.Task, plan *planning.Plan) []validation.Result {
+	pipeline := validation.New(e.workDir)
+	var files []validation.File
+	for _, f := range t.Files {
+		if f != "" {
+			files = append(files, validation.File{Path: f})
+		}
+	}
+	results := pipeline.ValidateFiles(files)
+	results = append(results, pipeline.RunGoChecks()...)
+	failed := make([]validation.Result, 0, len(results))
+	for _, r := range results {
+		if !r.Passed {
+			failed = append(failed, r)
+		}
+	}
+	if len(failed) == 0 {
+		return results
+	}
+	e.emitEvent("quality_loop", t.ID, map[string]any{"failed": len(failed)})
+
+	for iter := 0; iter < 2 && len(failed) > 0; iter++ {
+		debugger, ok := agents.Find("Debugger")
+		if !ok {
+			break
+		}
+		var errText strings.Builder
+		for _, r := range failed {
+			errText.WriteString(r.String())
+			errText.WriteString("\n")
+		}
+		res, err := debugger.Run(&agents.Context{Provider: p, Model: e.model, Tools: e.toolReg}, agents.Task{
+			ID:          "quality:" + t.ID,
+			Goal:        goal,
+			Description: "Fix the validation failures below for the task: " + t.Title,
+			Context:     plan.String(),
+			Code:        errText.String(),
+		})
+		if err != nil {
+			break
+		}
+		if code := agents.ExtractCodeBlock(res.Output); code != "" {
+			for _, f := range t.Files {
+				full := filepath.Join(e.workDir, f)
+				if _, rerr := os.Stat(full); rerr == nil {
+					os.WriteFile(full, []byte(code), 0644)
+					e.autoFormat(full)
+				}
+			}
+		}
+		e.state.log(fmt.Sprintf("quality loop iteration %d: %d failures", iter+1, len(failed)))
+		e.emitEvent("quality_fix", t.ID, map[string]any{"iteration": iter + 1})
+		failed = failed[:0]
+		for _, r := range pipeline.ValidateFiles(files) {
+			if !r.Passed {
+				failed = append(failed, r)
+			}
+		}
+	}
+	return results
+}
+
 func hasReady(plan *planning.Plan) bool {
 	_, ok := plan.NextTask()
 	return ok
-}
-
-func isConnectivityError(err error) bool {
-	if err == nil {
-		return false
-	}
-	msg := strings.ToLower(err.Error())
-	return strings.Contains(msg, "dial tcp") ||
-		strings.Contains(msg, "connection refused") ||
-		strings.Contains(msg, "no such host") ||
-		strings.Contains(msg, "connection reset") ||
-		strings.Contains(msg, "timeout") ||
-		strings.Contains(msg, "connectex")
 }
 
 func (e *Engine) autoFormat(path string) {

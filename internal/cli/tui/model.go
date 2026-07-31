@@ -212,6 +212,8 @@ type model struct {
 	confirmed    bool
 	confirmAction string
 	sessions     []sessionMeta
+	wsData       *workspace
+	helpShown    bool
 }
 
 func NewChatModel(cfg *config.Manager) *model {
@@ -273,6 +275,7 @@ func (m *model) init() {
 	conf := m.cfg.GetConfig()
 	m.rtr = router.NewRouter(conf.DefaultProvider, conf.DefaultModel)
 	m.loadSession()
+	m.loadHistory()
 	if len(m.messages) > 0 {
 		for _, msg := range m.messages {
 			if msg.Role == models.RoleUser {
@@ -342,7 +345,7 @@ func (m *model) splash() {
 	} {
 		m.entries = append(m.entries, entry{role: "system", content: m.t.logo.Render(s)})
 	}
-	m.addSys("v0.2.4  |  Model: " + m.modelName + "  |  Provider: " + m.provName)
+	m.addSys("v0.2.6  |  Model: " + m.modelName + "  |  Provider: " + m.provName)
 	if m.sessionTitle != "" {
 		m.addSys("Session: " + m.sessionTitle)
 	}

@@ -80,7 +80,7 @@ func searchDuckDuckGo(query string) (string, error) {
 	if err != nil {
 		return "", err
 	}
-	req.Header.Set("User-Agent", "Mozilla/5.0 (compatible; DeltaCode/0.2.4)")
+	req.Header.Set("User-Agent", "Mozilla/5.0 (compatible; DeltaCode/0.2.6)")
 	client := &http.Client{Timeout: 30 * time.Second}
 	resp, err := client.Do(req)
 	if err != nil {

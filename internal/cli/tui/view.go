@@ -10,6 +10,9 @@ import (
 )
 
 func (m *model) View() string {
+	if m.wsData != nil && m.wsData.shown {
+		return m.workspaceView()
+	}
 	m.render()
 	parts := []string{
 		m.header(),
@@ -19,8 +22,41 @@ func (m *model) View() string {
 	if dd := m.dropdownView(); dd != "" {
 		parts = append(parts, dd)
 	}
+	if m.helpShown {
+		parts = append(parts, m.keysHelp())
+	}
 	parts = append(parts, m.ta.View(), m.status(), m.footer())
 	return lipgloss.JoinVertical(lipgloss.Left, parts...)
+}
+
+// keysHelp renders the keyboard shortcut overlay.
+func (m *model) keysHelp() string {
+	style := m.t.brd.Border(lipgloss.RoundedBorder()).Padding(0, 1).Width(m.w - 4)
+	var lines []string
+	lines = append(lines, lipgloss.NewStyle().Bold(true).Foreground(lipgloss.Color("43")).Render(" KEYBOARD SHORTCUTS "))
+	pairs := [][2]string{
+		{"Enter", "send prompt"},
+		{"Shift+Enter", "newline"},
+		{"Ctrl+K", "command palette"},
+		{"Ctrl+M", "switch model"},
+		{"Ctrl+P", "switch provider"},
+		{"Ctrl+N", "new session"},
+		{"Ctrl+S", "save session"},
+		{"Ctrl+W", "workspace view"},
+		{"Ctrl+H", "this help"},
+		{"Ctrl+L", "clear conversation"},
+		{"↑/↓", "history / scroll"},
+		{"j/k", "scroll"},
+		{"g", "jump to bottom"},
+		{"Space", "lock scroll"},
+		{"Tab", "focus input"},
+		{"Esc", "stop streaming"},
+		{"Ctrl+C", "quit (press twice)"},
+	}
+	for _, p := range pairs {
+		lines = append(lines, fmt.Sprintf(" %s  %s", m.t.fk.Render(p[0]), m.t.fd.Render(p[1])))
+	}
+	return style.Render(strings.Join(lines, "\n"))
 }
 
 func (m *model) header() string {
@@ -29,12 +65,16 @@ func (m *model) header() string {
 	if m.minimal {
 		i = m.t.subh.Render(" " + m.modelName + " ")
 	}
+	var extra string
+	if w := m.ws(); w.branch != "" && !m.minimal {
+		extra = m.t.stat.Render(" " + w.branch + " ")
+	}
 	ts := m.t.stat.Render(time.Now().Format("Jan 02 15:04"))
-	sp := m.w - lipgloss.Width(l) - lipgloss.Width(i) - lipgloss.Width(ts) - 4
+	sp := m.w - lipgloss.Width(l) - lipgloss.Width(i) - lipgloss.Width(ts) - lipgloss.Width(extra) - 4
 	if sp < 1 {
 		sp = 1
 	}
-	return lipgloss.JoinHorizontal(lipgloss.Center, l, strings.Repeat(" ", sp), i, ts)
+	return lipgloss.JoinHorizontal(lipgloss.Center, l, strings.Repeat(" ", sp), extra, i, ts)
 }
 
 func (m *model) status() string {

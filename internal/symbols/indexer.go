@@ -167,6 +167,36 @@ func (g *SymbolGraph) GetSymbolsByFile(filePath string) []*Symbol {
 	return result
 }
 
+// RemoveSymbolsByFile deletes all symbols, call edges and import edges that
+// belong to a file, so it can be re-indexed incrementally.
+func (g *SymbolGraph) RemoveSymbolsByFile(filePath string) {
+	g.mu.Lock()
+	defer g.mu.Unlock()
+	for _, id := range g.fileIndex[filePath] {
+		if s, ok := g.symbols[id]; ok {
+			delete(g.nameIndex, s.Name)
+			delete(g.symbols, id)
+		}
+	}
+	delete(g.fileIndex, filePath)
+	keptCalls := g.callEdges[:0]
+	for _, e := range g.callEdges {
+		if strings.HasPrefix(e.CallerID, filePath+":") {
+			continue
+		}
+		keptCalls = append(keptCalls, e)
+	}
+	g.callEdges = keptCalls
+	keptImports := g.importEdges[:0]
+	for _, e := range g.importEdges {
+		if strings.HasPrefix(e.ImporterID, filePath+":") {
+			continue
+		}
+		keptImports = append(keptImports, e)
+	}
+	g.importEdges = keptImports
+}
+
 func (g *SymbolGraph) Lookup(name string) []*Symbol {
 	g.mu.RLock()
 	defer g.mu.RUnlock()

@@ -30,9 +30,10 @@ func DefaultWeights() RankWeights {
 }
 
 type RankedTool struct {
-	Tool  *Tool
-	Score float64
-	Why   string
+	Tool       *Tool
+	Score      float64
+	Capability float64
+	Why        string
 }
 
 // Ranker scores candidate tools for a given capability request.
@@ -188,9 +189,18 @@ func (r *Ranker) Rank(query string, candidates []*Tool, limit int) []RankedTool 
 		if t.Stats.Calls > 0 {
 			why = append(why, "proven")
 		}
-		ranked = append(ranked, RankedTool{Tool: t, Score: score, Why: strings.Join(why, ",")})
+		ranked = append(ranked, RankedTool{Tool: t, Score: score, Capability: cap, Why: strings.Join(why, ",")})
 	}
-	sort.Slice(ranked, func(i, j int) bool { return ranked[i].Score > ranked[j].Score })
+	// An exact capability match (tool name in the query) always dominates,
+	// even when other tools carry stronger usage history.
+	sort.Slice(ranked, func(i, j int) bool {
+		ei := ranked[i].Capability >= 1.0
+		ej := ranked[j].Capability >= 1.0
+		if ei != ej {
+			return ei
+		}
+		return ranked[i].Score > ranked[j].Score
+	})
 	if limit > 0 && len(ranked) > limit {
 		ranked = ranked[:limit]
 	}
