@@ -11,6 +11,8 @@ import (
 	"github.com/DevAnimecx/deltacode/internal/config"
 	"github.com/DevAnimecx/deltacode/internal/context"
 	"github.com/DevAnimecx/deltacode/internal/memory"
+	"github.com/DevAnimecx/deltacode/internal/planning"
+	"github.com/DevAnimecx/deltacode/internal/repointel"
 	"github.com/DevAnimecx/deltacode/internal/router"
 	"github.com/DevAnimecx/deltacode/internal/sandbox"
 	"github.com/DevAnimecx/deltacode/internal/skill"
@@ -234,6 +236,7 @@ type model struct {
 
 	tm  *timemachine.Machine
 	sbx *sandbox.Sandbox
+	rp  *repointel.Watcher
 
 	leaderState leaderState
 
@@ -242,6 +245,9 @@ type model struct {
 
 	undoStack   *redoStack
 	scrollState scrollState
+
+	currentPlan *planning.Plan
+	planPending bool
 }
 
 func NewChatModel(cfg *config.Manager) *model {
@@ -306,6 +312,10 @@ func (m *model) init() {
 	}
 	if sbx, err := sandbox.New(); err == nil {
 		m.sbx = sbx
+	}
+	if rp := repointel.NewWatcher(repointel.WatchConfig{Root: ".", PollInterval: 5 * time.Second, Index: true}); rp != nil {
+		m.rp = rp
+		m.rp.Start()
 	}
 	if mem, err := memory.NewProjectMemory(); err == nil {
 		m.mem = mem

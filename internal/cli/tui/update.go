@@ -166,6 +166,10 @@ func (m *model) onInputKey(msg tea.KeyMsg) tea.Cmd {
 		if m.pal.visible() {
 			return m.applyPaletteSelection()
 		}
+		if m.planPending && m.currentPlan != nil {
+			m.planPending = false
+			return m.executePlan(m.currentPlan)
+		}
 		t := strings.TrimSpace(m.ta.Value())
 		if t == "" {
 			return nil
@@ -563,6 +567,7 @@ func (m *model) slash(cmd string) tea.Cmd {
 		m.addSys("/agent      Toggle agent task mode")
 		m.addSys("/agent-task Set agent task type")
 		m.addSys("/auto-fix   Run autonomous fix loop")
+		m.addSys("/plan       Plan goal with task graph")
 		m.addSys("/checkpoint Save checkpoint")
 		m.addSys("/checkpoints List checkpoints")
 		m.addSys("/restore    Restore checkpoint")
@@ -702,6 +707,21 @@ func (m *model) slash(cmd string) tea.Cmd {
 			goal = m.lastPrompt
 		}
 		m.startAutoFix(goal)
+	case "/plan":
+		goal := strings.Join(p[1:], " ")
+		if goal == "" {
+			goal = m.lastPrompt
+		}
+		if goal == "" {
+			m.addSys("Usage: /plan <goal>")
+			return nil
+		}
+		m.currentPlan = m.planGoal(goal)
+		m.addSys(m.renderPlanCard(m.currentPlan))
+		m.addSys("")
+		m.addSys("Press Enter to approve and execute plan")
+		m.ta.SetValue("")
+		m.ta.Focus()
 	case "/checkpoint":
 		m.saveCheckpoint("")
 	case "/checkpoints":

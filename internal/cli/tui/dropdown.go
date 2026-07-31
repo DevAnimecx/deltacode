@@ -43,6 +43,7 @@ func slashItems() []ddItem {
 		{label: "/tips", desc: "Show usage tips", value: "/tips"},
 		{label: "/undo", desc: "Remove last exchange", value: "/undo"},
 		{label: "/workspace", desc: "Open engineering workspace", value: "/workspace"},
+		{label: "/plan", desc: "Plan goal with task graph", value: "/plan"},
 		{label: "/wrap", desc: "Toggle word wrap", value: "/wrap"},
 	}
 }
