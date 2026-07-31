@@ -19,7 +19,9 @@ func (m *model) View() string {
 		m.t.sep.Render("─" + strings.Repeat("─", max(m.w-2, 0)) + "─"),
 		m.vp.View(),
 	}
-	if dd := m.dropdownView(); dd != "" {
+	if m.pal.visible() {
+		parts = append(parts, m.paletteView())
+	} else if dd := m.dropdownView(); dd != "" {
 		parts = append(parts, dd)
 	}
 	if m.helpShown {
@@ -37,6 +39,13 @@ func (m *model) keysHelp() string {
 	pairs := [][2]string{
 		{"Enter", "send prompt"},
 		{"Shift+Enter", "newline"},
+		{"Ctrl+X", "leader key"},
+		{"Ctrl+X N", "new session"},
+		{"Ctrl+X U", "undo"},
+		{"Ctrl+X R", "redo"},
+		{"Ctrl+X C", "compact"},
+		{"Ctrl+X P", "command palette"},
+		{"Ctrl+X M", "model list"},
 		{"Ctrl+K", "command palette"},
 		{"Ctrl+M", "switch model"},
 		{"Ctrl+P", "switch provider"},
@@ -45,6 +54,8 @@ func (m *model) keysHelp() string {
 		{"Ctrl+W", "workspace view"},
 		{"Ctrl+H", "this help"},
 		{"Ctrl+L", "clear conversation"},
+		{"@", "file reference"},
+		{"!cmd", "shell command"},
 		{"↑/↓", "history / scroll"},
 		{"j/k", "scroll"},
 		{"g", "jump to bottom"},
@@ -126,6 +137,7 @@ func (m *model) footer() string {
 	keys := []struct{ k, d string }{
 		{"Enter", "send"}, {"Ctrl+K", "palette"}, {"Ctrl+M", "model"}, {"Ctrl+P", "provider"},
 		{"↑↓", "hist"}, {"j/k", "scroll"}, {"/help", "cmds"}, {"Esc", "stop"}, {"Ctrl+C", "quit"},
+		{"@", "ref"}, {"!", "shell"}, {"Ctrl+X", "leader"},
 	}
 	var p []string
 	for _, x := range keys {

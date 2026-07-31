@@ -222,18 +222,23 @@ type model struct {
 	agentMode        bool
 	taskType         string
 
-	health       *healthStore
-	tokSpeed     float64
+	health         *healthStore
+	tokSpeed       float64
 	lastStreamLen  int
 	lastStreamTime time.Time
 
-	autoEng      *autonomous.Engine
-	autoRunning  bool
+	autoEng        *autonomous.Engine
+	autoRunning    bool
 	autoEventsPath string
-	autoEventsPos int64
+	autoEventsPos  int64
 
-	tm *timemachine.Machine
+	tm  *timemachine.Machine
 	sbx *sandbox.Sandbox
+
+	leaderState leaderState
+
+	pal      palette
+	palInput string
 }
 
 func NewChatModel(cfg *config.Manager) *model {

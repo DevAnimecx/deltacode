@@ -18,7 +18,7 @@ func (m *model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.w = v.Width
 		m.h = v.Height
 		vpH := m.h - 9
-		if m.dd.visible() {
+		if m.dd.visible() || m.pal.visible() {
 			vpH -= 8
 		}
 		if vpH < 5 {
@@ -32,10 +32,16 @@ func (m *model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return m, nil
 
 	case tea.MouseMsg:
+		if m.pal.visible() {
+			return m, nil
+		}
 		m.vp, _ = m.vp.Update(msg)
 		return m, nil
 
 	case tea.KeyMsg:
+		if cmd, handled := m.consumeLeader(msg); handled {
+			return m, cmd
+		}
 		return m, m.onKey(v)
 
 	case spinner.TickMsg:
@@ -75,6 +81,9 @@ func (m *model) onKey(msg tea.KeyMsg) tea.Cmd {
 	if m.dd.visible() {
 		return m.onDropdownKey(msg)
 	}
+	if m.pal.visible() {
+		return m.onPaletteKey(msg)
+	}
 
 	switch msg.String() {
 	case "ctrl+c":
@@ -110,13 +119,13 @@ func (m *model) onKey(msg tea.KeyMsg) tea.Cmd {
 
 	switch msg.String() {
 	case "ctrl+k":
-		m.openDropdown(ddCommand)
+		m.openPalette(palCommand)
 		return nil
 	case "ctrl+m":
 		m.openDropdown(ddModel)
 		return nil
 	case "ctrl+p":
-		m.openDropdown(ddProvider)
+		m.openPalette(palCommand)
 		return nil
 	case "ctrl+n":
 		return m.newSession(true)
@@ -138,6 +147,9 @@ func (m *model) onInputKey(msg tea.KeyMsg) tea.Cmd {
 		if m.dd.kind == ddSlash && m.dd.open && len(m.dd.filtered) > 0 {
 			m.applySlashItem(m.dd.filtered[m.dd.cursor].value)
 			return nil
+		}
+		if m.pal.visible() {
+			return m.applyPaletteSelection()
 		}
 		t := strings.TrimSpace(m.ta.Value())
 		if t == "" {
@@ -196,6 +208,12 @@ func (m *model) onInputKey(msg tea.KeyMsg) tea.Cmd {
 		}
 
 	case "tab":
+		if m.pal.visible() {
+			if m.pal.cursor < len(m.pal.filtered)-1 {
+				m.pal.cursor++
+			}
+			return nil
+		}
 		if m.ta.Focused() {
 			m.ta.Blur()
 		} else {
@@ -203,6 +221,12 @@ func (m *model) onInputKey(msg tea.KeyMsg) tea.Cmd {
 		}
 		return nil
 	case "shift+tab":
+		if m.pal.visible() {
+			if m.pal.cursor > 0 {
+				m.pal.cursor--
+			}
+			return nil
+		}
 		if m.ta.Focused() {
 			m.ta.Blur()
 		} else {
@@ -355,6 +379,22 @@ func (m *model) maybeSlashComplete() {
 	}
 	if m.dd.kind == ddSlash {
 		m.dd.setOpen(false)
+	}
+	if idx := strings.LastIndex(val, "@"); idx >= 0 {
+		query := val[idx+1:]
+		if !strings.Contains(query, " ") {
+			files := m.fuzzyFiles(query)
+			if len(files) > 0 {
+				m.pal.kind = palFile
+				m.pal.items = m.paletteFiles(query)
+				m.applyPaletteFilter()
+				m.pal.setOpen(true)
+				return
+			}
+		}
+	}
+	if m.pal.kind == palFile {
+		m.pal.setOpen(false)
 	}
 }
 
@@ -512,6 +552,9 @@ func (m *model) slash(cmd string) tea.Cmd {
 		m.addSys("/checkpoints List checkpoints")
 		m.addSys("/restore    Restore checkpoint")
 		m.addSys("/run        Run last code block")
+		m.addSys("/compact    Summarize session")
+		m.addSys("/redo       Redo last undone")
+		m.addSys("/init       Initialize AGENTS.md")
 		m.addSys("")
 		m.addSys("----- Keys -----")
 		m.addSys("Enter       Send message")
@@ -519,11 +562,12 @@ func (m *model) slash(cmd string) tea.Cmd {
 		m.addSys("Esc         Stop streaming")
 		m.addSys("Ctrl+K      Command palette")
 		m.addSys("Ctrl+M      Model dropdown")
-		m.addSys("Ctrl+P      Provider dropdown")
+		m.addSys("Ctrl+P      Provider dropdown / palette")
 		m.addSys("Ctrl+N      New session")
 		m.addSys("Ctrl+S      Save session")
+		m.addSys("Ctrl+W      Workspace view")
 		m.addSys("Tab         Focus chat/input")
-		m.addSys("Up/Down     Input history (when focused)")
+		m.addSys("↑/↓         Input history (when focused)")
 		m.addSys("j/k         Scroll chat (when unfocused)")
 		m.addSys("Space       Toggle scroll lock")
 		m.addSys("g/G         Scroll to top/bottom")
@@ -538,6 +582,24 @@ func (m *model) slash(cmd string) tea.Cmd {
 		m.addSys("T           Toggle reasoning")
 		m.addSys("Ctrl+L      Clear all")
 		m.addSys("Ctrl+C      Quit")
+		m.addSys("")
+		m.addSys("----- Leader (Ctrl+X) -----")
+		m.addSys("Ctrl+X N    New session")
+		m.addSys("Ctrl+X U    Undo")
+		m.addSys("Ctrl+X R    Redo")
+		m.addSys("Ctrl+X C    Compact")
+		m.addSys("Ctrl+X P    Command palette")
+		m.addSys("Ctrl+X M    Model list")
+		m.addSys("Ctrl+X T    Theme")
+		m.addSys("Ctrl+X E    Editor")
+		m.addSys("Ctrl+X X    Export")
+		m.addSys("Ctrl+X Q    Quit")
+		m.addSys("Ctrl+X H    Help")
+		m.addSys("Ctrl+X S    Stats")
+		m.addSys("")
+		m.addSys("----- Inline -----")
+		m.addSys("@file      Reference file in prompt")
+		m.addSys("!cmd       Run shell command")
 	case "/cost":
 		m.addSys(fmt.Sprintf("Cost: $%.4f  |  Tokens: %d", m.cost, m.tok))
 	case "/model":
@@ -649,6 +711,8 @@ func (m *model) slash(cmd string) tea.Cmd {
 
 func (m *model) submit(prompt string) tea.Cmd {
 	m.lastPrompt = prompt
+	prompt = m.injectShell(prompt)
+	prompt = m.resolveFileRefs(prompt)
 	m.addUser(prompt)
 	m.statusText = "Thinking..."
 	m.startTime = time.Now()
