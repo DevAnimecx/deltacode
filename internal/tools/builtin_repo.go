@@ -1,7 +1,6 @@
 package tools
 
 import (
-	"encoding/json"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -232,19 +231,24 @@ func skillTool(args ...string) (string, error) {
 	if len(args) == 0 {
 		return "", fmt.Errorf("skill: action required (search|list|export|rate)")
 	}
-	home, err := os.UserHomeDir()
-	if err != nil {
-		return "", err
-	}
-	_ = home
+	eng := intelligence.NewSkillEngine()
 	switch args[0] {
 	case "search":
 		if len(args) < 2 {
 			return "", fmt.Errorf("skill search: query required")
 		}
-		return fmt.Sprintf("skill search %q: see `delta skill` command", strings.Join(args[1:], " ")), nil
+		query := strings.Join(args[1:], " ")
+		matches := eng.Find(query)
+		if len(matches) == 0 {
+			return fmt.Sprintf("No skills found for %q", query), nil
+		}
+		var lines []string
+		for _, s := range matches {
+			lines = append(lines, fmt.Sprintf("  %s (uses: %d)", s.Name, s.UsageCount))
+		}
+		return "Skills:\n" + strings.Join(lines, "\n"), nil
 	case "list":
-		return "installed skills: use `delta skill list`", nil
+		return "Skills managed via `delta skill list` command", nil
 	default:
 		return "", fmt.Errorf("skill: use the `delta skill` command for full skill management")
 	}
@@ -579,5 +583,3 @@ func scanSecrets(root string) string {
 func regexpMustCompile(pattern string) *regexp.Regexp {
 	return regexp.MustCompile(pattern)
 }
-
-var _ = json.Marshal

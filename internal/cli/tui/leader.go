@@ -1,6 +1,10 @@
 package tui
 
 import (
+	"os"
+	"os/exec"
+	"path/filepath"
+	"strings"
 	"time"
 
 	tea "github.com/charmbracelet/bubbletea"
@@ -91,10 +95,53 @@ func (m *model) consumeLeader(msg tea.Msg) (tea.Cmd, bool) {
 }
 
 func (m *model) openEditor() tea.Cmd {
+	editor := os.Getenv("EDITOR")
+	if editor == "" {
+		editor = os.Getenv("VISUAL")
+	}
+	if editor == "" {
+		editor = "notepad"
+	}
+	path := filepath.Join(sessionsDir(), "edit-"+time.Now().Format("20060102150405")+".md")
+	var b strings.Builder
+	for _, e := range m.entries {
+		switch e.role {
+		case "user":
+			b.WriteString("## User\n" + e.content + "\n\n")
+		case "assistant":
+			b.WriteString("## Assistant\n" + e.content + "\n\n")
+		}
+	}
+	os.WriteFile(path, []byte(b.String()), 0644)
+	cmd := exec.Command(editor, path)
+	cmd.Stdin = os.Stdin
+	cmd.Stdout = os.Stdout
+	cmd.Stderr = os.Stderr
+	_ = cmd.Run()
+	data, err := os.ReadFile(path)
+	if err == nil {
+		content := strings.TrimSpace(string(data))
+		if content != "" {
+			m.addSys("Content loaded from editor")
+			m.ta.SetValue(content)
+			m.ta.Focus()
+		}
+	}
+	os.Remove(path)
 	return nil
 }
 
 func (m *model) redoLast() tea.Cmd {
-	m.addSys("Redo is not implemented yet.")
+	e, msg, ok := m.popUndo()
+	if !ok {
+		m.addSys("Nothing to redo")
+		return nil
+	}
+	m.entries = append(m.entries, e)
+	if msg.Role != "" {
+		m.messages = append(m.messages, msg)
+	}
+	m.render()
+	m.toastNow("Redo restored")
 	return nil
 }

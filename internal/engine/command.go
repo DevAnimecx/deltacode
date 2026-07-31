@@ -31,11 +31,14 @@ type Engine struct {
 func New(cfg *config.Manager) *Engine {
 	e := &Engine{cfg: cfg}
 
-	e.context, _ = context.NewEngine()
+	if ctx, err := context.NewEngine(); err == nil {
+		e.context = ctx
+	}
 
 	if m, err := memory.NewProjectMemory(); err == nil {
 		e.mem = m
-		e.sessionID, _ = m.CreateSession("auto-session")
+		sid, _ := m.CreateSession("auto-session")
+		e.sessionID = sid
 	}
 
 	if v, err := memory.NewVectorMemory(); err == nil {

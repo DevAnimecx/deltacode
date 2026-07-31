@@ -87,7 +87,6 @@ func aspectPrompt(a Aspect) string {
 func (e *Engine) ReviewCode(goal, code string, files []string, repoInfo string) (*Result, error) {
 	result := &Result{}
 	var total float64
-	start := time.Now()
 
 	fileCtx := ""
 	if len(files) > 0 {
@@ -110,8 +109,6 @@ func (e *Engine) ReviewCode(goal, code string, files []string, repoInfo string) 
 			result.Passed = false
 		}
 	}
-	result.OverallScore = total / float64(len(e.aspects))
-	_ = start
 	return result, nil
 }
 

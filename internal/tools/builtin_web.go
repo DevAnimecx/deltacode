@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"os/exec"
 	"strings"
 	"time"
 )
@@ -143,13 +144,52 @@ func stripTags(s string) string {
 	return strings.TrimSpace(b.String())
 }
 
-// ---------- Browser Tool (health-checked stub) ----------
+// ---------- Browser Tool (curl fallback) ----------
 
 func browserTool(args ...string) (string, error) {
 	if len(args) == 0 {
-		return "", fmt.Errorf("browser: action required (open|navigate|click|fill|submit|screenshot|text)")
+		return "", fmt.Errorf("browser: action required (open|text)")
 	}
-	return "", fmt.Errorf("browser tool requires Playwright; run `npm i -g playwright` and `playwright install chromium` to enable")
+	switch args[0] {
+	case "open":
+		if len(args) < 2 {
+			return "", fmt.Errorf("browser open: URL required")
+		}
+		url := args[1]
+		cmd := exec.Command("curl", "-sL", "--max-time", "30", url)
+		out, err := cmd.CombinedOutput()
+		if err != nil {
+			return "", fmt.Errorf("browser fetch failed: %w", err)
+		}
+		return string(out), nil
+	case "text":
+		if len(args) < 2 {
+			return "", fmt.Errorf("browser text: URL required")
+		}
+		url := args[1]
+		cmd := exec.Command("curl", "-sL", "--max-time", "30", url)
+		out, err := cmd.CombinedOutput()
+		if err != nil {
+			return "", fmt.Errorf("browser fetch failed: %w", err)
+		}
+		text := strings.TrimSpace(string(out))
+		text = strings.ReplaceAll(text, "<script", "\n<!--script")
+		text = strings.ReplaceAll(text, "</script", "\n<!--/script")
+		lines := strings.Split(text, "\n")
+		var clean []string
+		for _, l := range lines {
+			l = strings.TrimSpace(l)
+			if l == "" || strings.HasPrefix(l, "<!") || strings.HasPrefix(l, "<meta") || strings.HasPrefix(l, "<link") {
+				continue
+			}
+			if !strings.Contains(l, "<") || strings.Contains(l, ">") && !strings.HasPrefix(l, "<") {
+				clean = append(clean, l)
+			}
+		}
+		return strings.Join(clean, "\n"), nil
+	default:
+		return "", fmt.Errorf("browser: unknown action %q (use open|text)", args[0])
+	}
 }
 
 // ---------- Docs Tool ----------

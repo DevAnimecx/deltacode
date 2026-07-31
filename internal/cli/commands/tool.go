@@ -248,5 +248,4 @@ func runToolBuild(cfg *config.Manager, task string) {
 	}
 	fmt.Printf("✓ Built tool %q at ~/.delta/tools/%s/\n", tool.Name, tool.Name)
 	fmt.Println("  Register with: delta tool reload")
-	_ = reg
 }

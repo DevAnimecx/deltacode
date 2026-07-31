@@ -217,7 +217,6 @@ func (s *Store) Events() []Event {
 func (s *Store) Summary() string {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
-	var b []byte
 	lines := []string{}
 	totalCalls := 0
 	totalTokens := 0
@@ -228,7 +227,6 @@ func (s *Store) Summary() string {
 		totalCost += m.TotalCost
 	}
 	lines = append(lines, fmt.Sprintf("calls=%d tokens=%d cost=$%.4f", totalCalls, totalTokens, totalCost))
-	_ = b
 	return joinLines(lines)
 }
 

@@ -1,6 +1,11 @@
 package tui
 
-import "fmt"
+import (
+	"encoding/json"
+	"fmt"
+	"os"
+	"path/filepath"
+)
 
 type mcpServer struct {
 	Name   string
@@ -8,11 +13,61 @@ type mcpServer struct {
 	Tools  []string
 }
 
+type mcpConfig struct {
+	Servers map[string]mcpServerEntry `json:"servers"`
+}
+
+type mcpServerEntry struct {
+	Command string            `json:"command"`
+	Args    []string          `json:"args"`
+	Env     map[string]string `json:"env"`
+	Tools   []string          `json:"tools,omitempty"`
+}
+
 func (m *model) listMCPServers() []mcpServer {
-	return []mcpServer{
-		{Name: "filesystem", Status: "enabled", Tools: []string{"read_file", "write_file", "list_directory"}},
-		{Name: "git", Status: "enabled", Tools: []string{"git_status", "git_diff", "git_log"}},
+	home, err := os.UserHomeDir()
+	if err != nil {
+		return nil
 	}
+	var servers []mcpServer
+	paths := []string{
+		filepath.Join(home, ".delta", "mcp.json"),
+		filepath.Join(".delta", "mcp.json"),
+	}
+	for _, p := range paths {
+		data, err := os.ReadFile(p)
+		if err != nil {
+			continue
+		}
+		var cfg mcpConfig
+		if json.Unmarshal(data, &cfg) != nil {
+			continue
+		}
+		for name, entry := range cfg.Servers {
+			status := "enabled"
+			if entry.Command == "" {
+				status = "misconfigured"
+			}
+			tools := entry.Tools
+			if len(tools) == 0 {
+				tools = []string{"(auto-discovered on connect)"}
+			}
+			servers = append(servers, mcpServer{
+				Name:   name,
+				Status: status,
+				Tools:  tools,
+			})
+		}
+		break
+	}
+	if len(servers) == 0 {
+		servers = append(servers, mcpServer{
+			Name:   "(none configured)",
+			Status: "no config",
+			Tools:  []string{"Add servers to ~/.delta/mcp.json"},
+		})
+	}
+	return servers
 }
 
 func (m *model) showMCP() {

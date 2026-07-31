@@ -8,7 +8,6 @@ import (
 	"sort"
 	"strings"
 	"sync"
-	"time"
 )
 
 type Registry struct {
@@ -338,5 +337,3 @@ func (r *Registry) TopBy(limit int, scoreFn func(*Tool) float64) []*Tool {
 	}
 	return list
 }
-
-var _ = time.Now

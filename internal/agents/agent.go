@@ -1,7 +1,6 @@
 package agents
 
 import (
-	"fmt"
 	"strings"
 	"time"
 
@@ -154,5 +153,3 @@ func ExtractCodeBlock(text string) string {
 	}
 	return strings.TrimSpace(text)
 }
-
-var _ = fmt.Sprintf

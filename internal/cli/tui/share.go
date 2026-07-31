@@ -2,6 +2,7 @@ package tui
 
 import (
 	"encoding/json"
+	"fmt"
 	"os"
 	"path/filepath"
 	"time"
@@ -24,5 +25,33 @@ func (m *model) shareSession() {
 }
 
 func (m *model) unshareSession() {
-	m.addSys("Unshare: remove shared session links.")
+	dir := sessionsDir()
+	entries, err := os.ReadDir(dir)
+	if err != nil {
+		m.addSys("No shared sessions found")
+		return
+	}
+	removed := 0
+	for _, e := range entries {
+		if !e.IsDir() && (e.Name() == "share-"+m.sessionTitle+".json" || e.Name() == "share-"+time.Now().Format("20060102")+"*.json") {
+			os.Remove(filepath.Join(dir, e.Name()))
+			removed++
+		}
+	}
+	if removed == 0 {
+		shareFiles := []string{}
+		for _, e := range entries {
+			if !e.IsDir() && len(e.Name()) > 6 && e.Name()[:6] == "share-" {
+				shareFiles = append(shareFiles, e.Name())
+			}
+		}
+		if len(shareFiles) > 0 {
+			os.Remove(filepath.Join(dir, shareFiles[0]))
+			m.addSys("Removed shared file: " + shareFiles[0])
+		} else {
+			m.addSys("No shared files to remove")
+		}
+	} else {
+		m.addSys(fmt.Sprintf("Removed %d shared file(s)", removed))
+	}
 }

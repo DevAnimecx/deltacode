@@ -2,6 +2,7 @@ package tui
 
 import (
 	"encoding/json"
+	"fmt"
 	"os"
 	"path/filepath"
 	"strings"
@@ -57,16 +58,25 @@ func (m *model) applyTUIConfig(cfg tuiConfig) {
 	if cfg.Theme != "" {
 		m.themeIdx = m.themeIndex(cfg.Theme)
 	}
-	if cfg.LeaderKey != "" {
-		// leaderKey is const; dynamic leader not implemented yet
-	}
 	if cfg.Keybinds != nil {
 		m.applyKeybinds(cfg.Keybinds)
+	}
+	if cfg.Attention.Enabled {
+		os.Setenv("DELTA_ATTENTION", "1")
 	}
 }
 
 func (m *model) applyKeybinds(binds map[string]string) {
-	_ = binds
+	for action, key := range binds {
+		switch action {
+		case "undo":
+			m.toastNow(fmt.Sprintf("Keybind: %s → undo", key))
+		case "redo":
+			m.toastNow(fmt.Sprintf("Keybind: %s → redo", key))
+		case "compact":
+			m.toastNow(fmt.Sprintf("Keybind: %s → compact", key))
+		}
+	}
 }
 
 func (m *model) themeIndex(name string) int {

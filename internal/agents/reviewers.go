@@ -156,5 +156,3 @@ func ParseScore(out string) float64 {
 	}
 	return score
 }
-
-var _ = fmt.Sprintf

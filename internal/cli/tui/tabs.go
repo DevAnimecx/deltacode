@@ -2,6 +2,7 @@ package tui
 
 import (
 	"fmt"
+	"os"
 	"sort"
 	"time"
 
@@ -94,7 +95,15 @@ func (m *model) closeTab(id string) {
 		m.newSession(true)
 		return
 	}
-	m.addSys("Tab close is not implemented yet.")
+	os.Remove(id)
+	for i, s := range m.sessions {
+		if s.File == id {
+			m.sessions = append(m.sessions[:i], m.sessions[i+1:]...)
+			break
+		}
+	}
+	m.addSys("Tab closed")
+	m.render()
 }
 
 func (m *model) nextTab() {

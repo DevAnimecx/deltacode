@@ -278,9 +278,6 @@ func terminalTool(args ...string) (string, error) {
 			fmt.Sscanf(args[i+1], "%d", &timeout)
 		}
 	}
-	if _, err := os.Executable(); err != nil {
-		_ = err
-	}
 	return runShellCommand(cmd, timeout)
 }
 

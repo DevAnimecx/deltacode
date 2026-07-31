@@ -48,8 +48,14 @@ func (m *model) attentionSound(event string) {
 	if !cfg.Enabled || !cfg.Sound {
 		return
 	}
-	_ = cfg.Volume
-	_ = event
+	switch runtime.GOOS {
+	case "windows":
+		_ = exec.Command("powershell", "-Command", "[Console]::Beep(800, 200)").Start()
+	case "darwin":
+		_ = exec.Command("afplay", "/System/Library/Sounds/Glass.aiff").Start()
+	case "linux":
+		_ = exec.Command("paplay", "/usr/share/sounds/freedesktop/stereo/complete.oga").Start()
+	}
 }
 
 func (m *model) notifyAttention(event string) {
