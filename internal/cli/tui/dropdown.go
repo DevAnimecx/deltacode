@@ -211,12 +211,13 @@ func (m *model) applyDropdownSelection() tea.Cmd {
 	}
 	sel := items[m.dd.cursor]
 	m.dd.setOpen(false)
+	m.ta.SetValue("")
 
 	switch m.dd.kind {
 	case ddCommand:
-		m.slash(sel.value)
+		return m.slash(sel.value)
 	case ddSlash:
-		m.slash(sel.value)
+		return m.slash(sel.value)
 	case ddModel:
 		m.modelName = sel.value
 		m.addSys("Model → " + sel.value)

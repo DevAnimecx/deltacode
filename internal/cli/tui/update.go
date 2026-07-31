@@ -376,10 +376,10 @@ func (m *model) refreshSlashDropdown(query string) {
 	}
 }
 
-func (m *model) applySlashItem(value string) {
+func (m *model) applySlashItem(value string) tea.Cmd {
 	m.dd.setOpen(false)
 	m.ta.SetValue("")
-	m.slash(value)
+	return m.slash(value)
 }
 
 func (m *model) findLastIdx(role string) int {
