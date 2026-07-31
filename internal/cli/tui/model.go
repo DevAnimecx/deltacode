@@ -264,6 +264,17 @@ func NewChatModel(cfg *config.Manager) *model {
 
 func (m *model) init() {
 	m.ctxEng, _ = context.NewEngine()
+	if m.ctxEng != nil {
+		// Keep the project context warm in the background so submit()
+		// never blocks the UI on a repo walk or git subprocesses.
+		go func() {
+			m.ctxEng.Refresh()
+			for {
+				time.Sleep(30 * time.Second)
+				m.ctxEng.Refresh()
+			}
+		}()
+	}
 	if mem, err := memory.NewProjectMemory(); err == nil {
 		m.mem = mem
 		m.sid, _ = mem.CreateSession("tui-session")

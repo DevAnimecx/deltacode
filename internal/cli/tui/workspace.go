@@ -76,7 +76,9 @@ func (m *model) ws() *workspace {
 		m.wsData.gitRefresh()
 	}
 	if time.Since(m.wsData.refreshed) > 30*time.Second {
-		m.wsData.gitRefresh()
+		// Refresh off the UI thread: git subprocesses on Windows/OneDrive
+		// can take hundreds of ms per render frame.
+		go m.wsData.gitRefresh()
 	}
 	return m.wsData
 }

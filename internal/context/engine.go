@@ -7,10 +7,20 @@ import (
 	"os/exec"
 	"path/filepath"
 	"strings"
+	"sync"
+	"time"
 )
+
+// cacheTTL bounds how stale a background-collected context may be before the
+// next BuildPrompt call re-collects synchronously.
+const cacheTTL = 60 * time.Second
 
 type Engine struct {
 	projectDir string
+
+	mu       sync.Mutex
+	cached   *Context
+	cachedAt time.Time
 }
 
 func NewEngine() (*Engine, error) {
@@ -64,8 +74,33 @@ func (e *Engine) CollectWithDiff() *Context {
 	return ctx
 }
 
-func (e *Engine) BuildPrompt(userPrompt string) string {
+// Refresh collects the project context and caches it. It is safe to call
+// from a background goroutine (the TUI does this on a timer so BuildPrompt
+// never blocks the UI thread on disk scans or git subprocesses).
+func (e *Engine) Refresh() *Context {
 	ctx := e.Collect()
+	e.mu.Lock()
+	e.cached = ctx
+	e.cachedAt = time.Now()
+	e.mu.Unlock()
+	return ctx
+}
+
+// BuildPrompt returns a prompt wrapped in the freshest cached project
+// context. If the cache is older than cacheTTL (or absent) it collects
+// synchronously so headless callers never see stale context.
+func (e *Engine) BuildPrompt(userPrompt string) string {
+	e.mu.Lock()
+	ctx := e.cached
+	fresh := ctx != nil && time.Since(e.cachedAt) < cacheTTL
+	e.mu.Unlock()
+	if !fresh {
+		ctx = e.Refresh()
+	}
+	return e.renderPrompt(ctx, userPrompt)
+}
+
+func (e *Engine) renderPrompt(ctx *Context, userPrompt string) string {
 	var b strings.Builder
 
 	b.WriteString("Project Context:\n")
