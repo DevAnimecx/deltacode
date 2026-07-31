@@ -136,6 +136,21 @@ func (m *model) onKey(msg tea.KeyMsg) tea.Cmd {
 	case "ctrl+h":
 		m.helpShown = !m.helpShown
 		return nil
+	case "ctrl+g":
+		m.showTimeline()
+		return nil
+	case "ctrl+tab":
+		m.nextTab()
+		return nil
+	case "ctrl+shift+tab":
+		m.prevTab()
+		return nil
+	case "f2":
+		m.cycleModel(false)
+		return nil
+	case "shift+f2":
+		m.cycleModel(true)
+		return nil
 	}
 
 	return m.onInputKey(msg)
@@ -596,6 +611,15 @@ func (m *model) slash(cmd string) tea.Cmd {
 		m.addSys("Ctrl+X Q    Quit")
 		m.addSys("Ctrl+X H    Help")
 		m.addSys("Ctrl+X S    Stats")
+		m.addSys("Ctrl+X G    Timeline")
+		m.addSys("")
+		m.addSys("----- Session -----")
+		m.addSys("/share      Share session")
+		m.addSys("/unshare    Unshare session")
+		m.addSys("/fork       Fork session")
+		m.addSys("/rename     Rename session")
+		m.addSys("/delete     Delete session")
+		m.addSys("/mcp        List MCP servers")
 		m.addSys("")
 		m.addSys("----- Inline -----")
 		m.addSys("@file      Reference file in prompt")
@@ -703,6 +727,26 @@ func (m *model) slash(cmd string) tea.Cmd {
 		}
 	case "/run":
 		m.runLastCodeBlock()
+	case "/compact":
+		m.compactSession()
+	case "/timeline":
+		m.showTimeline()
+	case "/share":
+		m.shareSession()
+	case "/unshare":
+		m.unshareSession()
+	case "/mcp":
+		m.showMCP()
+	case "/fork":
+		m.forkSession()
+	case "/rename":
+		if len(p) > 1 {
+			m.renameSession(strings.Join(p[1:], " "))
+		} else {
+			m.addSys("Usage: /rename <name>")
+		}
+	case "/delete":
+		m.deleteSession()
 	default:
 		m.addSys("Unknown: " + cmd + "  (try /help)")
 	}

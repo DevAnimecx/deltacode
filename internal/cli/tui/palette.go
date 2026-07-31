@@ -97,6 +97,12 @@ func (m *model) paletteCommands() []paletteItem {
 		{label: "/checkpoint", value: "/checkpoint", desc: "Save checkpoint", category: "tools"},
 		{label: "/run", value: "/run", desc: "Run last code block", category: "tools"},
 		{label: "/workspace", value: "/workspace", desc: "Workspace view", category: "tools"},
+		{label: "/mcp", value: "/mcp", desc: "List MCP servers", category: "tools"},
+		{label: "/share", value: "/share", desc: "Share session", category: "session"},
+		{label: "/unshare", value: "/unshare", desc: "Unshare session", category: "session"},
+		{label: "/fork", value: "/fork", desc: "Fork session", category: "session"},
+		{label: "/rename", value: "/rename", desc: "Rename session", category: "session"},
+		{label: "/delete", value: "/delete", desc: "Delete session", category: "session"},
 	}
 	for i := range items {
 		items[i].selected = items[i].value == "/"+items[i].label[1:]

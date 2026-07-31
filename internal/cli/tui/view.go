@@ -16,9 +16,14 @@ func (m *model) View() string {
 	m.render()
 	parts := []string{
 		m.header(),
-		m.t.sep.Render("─" + strings.Repeat("─", max(m.w-2, 0)) + "─"),
-		m.vp.View(),
 	}
+	if tabBar := m.tabBar(); tabBar != "" {
+		parts = append(parts, tabBar)
+	}
+	parts = append(parts,
+		m.t.sep.Render("─"+strings.Repeat("─", max(m.w-2, 0))+"─"),
+		m.vp.View(),
+	)
 	if m.pal.visible() {
 		parts = append(parts, m.paletteView())
 	} else if dd := m.dropdownView(); dd != "" {

@@ -82,6 +82,9 @@ func (m *model) consumeLeader(msg tea.Msg) (tea.Cmd, bool) {
 	case "s":
 		m.showStats()
 		return nil, true
+	case "g":
+		m.showTimeline()
+		return nil, true
 	default:
 		return nil, false
 	}

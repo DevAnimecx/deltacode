@@ -239,6 +239,9 @@ type model struct {
 
 	pal      palette
 	palInput string
+
+	undoStack   *redoStack
+	scrollState scrollState
 }
 
 func NewChatModel(cfg *config.Manager) *model {

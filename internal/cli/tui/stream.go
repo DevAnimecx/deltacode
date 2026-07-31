@@ -186,6 +186,7 @@ func (m *model) finishStream() {
 	m.stopOnce = nil
 	m.ta.Focus()
 	m.saveSession()
+	m.notifyAttention("Response complete")
 	m.render()
 }
 
@@ -194,6 +195,7 @@ func (m *model) failStream(err error) {
 	m.statusText = "Error"
 	m.lastError = err
 	m.addErr("Error: " + err.Error())
+	m.notifyAttention("Error: " + err.Error())
 	if next := m.failover(); next != nil {
 		m.provName = next.Name
 		m.addSys(fmt.Sprintf("Provider failed — auto-switched to %s. Type a new prompt or press R to retry.", next.Name))
